@@ -1,9 +1,13 @@
 {
   "name": "pdf.js-dist-viewer",
+  "version": "1.0.0",
   "description": "PDF.js dist (viewer.html)",
   "repository": "https://github.com/hckhanh/pdf.js-dist-viewer.git",
   "author": "Khánh <hoangchaukhanh93@gmail.com>",
   "license": "MIT",
+  "scripts": {
+    "postinstall": "cross-env PUPPETEER_PRODUCT=firefox node node_modules/puppeteer/install.js"
+  },
   "devDependencies": {
     "@babel/core": "^7.15.5",
     "@babel/plugin-transform-modules-commonjs": "^7.15.4",
@@ -65,8 +69,5 @@
     "webpack-stream": "^7.0.0",
     "wintersmith": "^2.5.0",
     "yargs": "^17.2.0"
-  },
-  "scripts": {
-    "postinstall": "cross-env PUPPETEER_PRODUCT=firefox node node_modules/puppeteer/install.js"
   }
 }
