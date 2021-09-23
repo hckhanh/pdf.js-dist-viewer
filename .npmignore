@@ -1,0 +1,16 @@
+/docs
+/examples
+/extensions
+/external
+/l10n
+/src
+/test
+/web
+/*.config
+/*.md
+/*.json
+/*.js
+/AUTHORS
+/EXPORT
+/LICENSE
+/.*

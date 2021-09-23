@@ -9453,9 +9453,9 @@ fsevents@^1.2.7:
   languageName: node
   linkType: hard
 
-"pdf.js@workspace:.":
+"pdf.js-dist-viewer@workspace:.":
   version: 0.0.0-use.local
-  resolution: "pdf.js@workspace:."
+  resolution: "pdf.js-dist-viewer@workspace:."
   dependencies:
     "@babel/core": ^7.15.5
     "@babel/plugin-transform-modules-commonjs": ^7.15.4
