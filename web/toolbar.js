@@ -124,11 +124,13 @@ class Toolbar {
 
     // The buttons within the toolbar.
     for (const { element, eventName } of this.buttons) {
-      element?.addEventListener("click", evt => {
-        if (eventName !== null) {
-          this.eventBus.dispatch(eventName, { source: this });
-        }
-      });
+      if (element) {
+        element?.addEventListener("click", evt => {
+          if (eventName !== null) {
+            this.eventBus.dispatch(eventName, { source: this });
+          }
+        });
+      }
     }
     // The non-button elements within the toolbar.
     pageNumber.addEventListener("click", function () {
