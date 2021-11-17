@@ -478,6 +478,12 @@ class Binder {
     return [occur.min, max];
   }
 
+  _setAndBind(formNode, dataNode) {
+    this._setProperties(formNode, dataNode);
+    this._bindItems(formNode, dataNode);
+    this._bindElement(formNode, dataNode);
+  }
+
   _bindElement(formNode, dataNode) {
     // Some nodes can be useless because min=0 so remove them
     // after the loop to avoid bad things.
@@ -530,7 +536,7 @@ class Binder {
       if (child.bind) {
         switch (child.bind.match) {
           case "none":
-            this._bindElement(child, dataNode);
+            this._setAndBind(child, dataNode);
             continue;
           case "global":
             global = true;
@@ -538,7 +544,7 @@ class Binder {
           case "dataRef":
             if (!child.bind.ref) {
               warn(`XFA - ref is empty in node ${child[$nodeName]}.`);
-              this._bindElement(child, dataNode);
+              this._setAndBind(child, dataNode);
               continue;
             }
             ref = child.bind.ref;
@@ -578,7 +584,7 @@ class Binder {
           }
 
           // Don't bind the value in newly created node because it's empty.
-          this._bindElement(child, match);
+          this._setAndBind(child, match);
           continue;
         } else {
           if (this._isConsumeData()) {
@@ -598,7 +604,7 @@ class Binder {
         }
       } else {
         if (!child.name) {
-          this._bindElement(child, dataNode);
+          this._setAndBind(child, dataNode);
           continue;
         }
         if (this._isConsumeData()) {
@@ -629,6 +635,13 @@ class Binder {
             /* skipConsumed = */ this.emptyMerge
           ).next().value;
           if (!match) {
+            // If there is no match (no data) and `min === 0` then
+            // the container is entirely excluded.
+            // https://www.pdfa.org/norm-refs/XFA-3_3.pdf#G12.1428332
+            if (min === 0) {
+              uselessNodes.push(child);
+              continue;
+            }
             // We're in matchTemplate mode so create a node in data to reflect
             // what we've in template.
             const nsId =
@@ -642,9 +655,7 @@ class Binder {
             dataNode[$appendChild](match);
 
             // Don't bind the value in newly created node because it's empty.
-            this._setProperties(child, match);
-            this._bindItems(child, match);
-            this._bindElement(child, match);
+            this._setAndBind(child, match);
             continue;
           }
           if (this.emptyMerge) {
@@ -657,9 +668,7 @@ class Binder {
       if (match) {
         this._bindOccurrences(child, match, picture);
       } else if (min > 0) {
-        this._setProperties(child, dataNode);
-        this._bindItems(child, dataNode);
-        this._bindElement(child, dataNode);
+        this._setAndBind(child, dataNode);
       } else {
         uselessNodes.push(child);
       }

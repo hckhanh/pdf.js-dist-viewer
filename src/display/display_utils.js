@@ -18,6 +18,7 @@ import {
   BaseException,
   isString,
   removeNullCharacters,
+  shadow,
   stringToBytes,
   Util,
   warn,
@@ -35,6 +36,11 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const PixelsPerInch = {
   CSS: 96.0,
   PDF: 72.0,
+
+  /** @type {number} */
+  get PDF_TO_CSS_UNITS() {
+    return shadow(this, "PDF_TO_CSS_UNITS", this.CSS / this.PDF);
+  },
 };
 
 class DOMCanvasFactory extends BaseCanvasFactory {
@@ -332,7 +338,7 @@ const LinkTarget = {
 
 /**
  * Adds various attributes (href, title, target, rel) to hyperlinks.
- * @param {HTMLLinkElement} link - The link element.
+ * @param {HTMLAnchorElement} link - The link element.
  * @param {ExternalLinkParameters} params
  */
 function addLinkAttributes(link, { url, target, rel, enabled = true } = {}) {
@@ -627,7 +633,6 @@ function getXfaPageViewport(xfaPage, { scale = 1, rotation = 0 }) {
 
 export {
   addLinkAttributes,
-  DEFAULT_LINK_REL,
   deprecated,
   DOMCanvasFactory,
   DOMCMapReaderFactory,

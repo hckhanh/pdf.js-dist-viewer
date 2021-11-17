@@ -55,6 +55,7 @@ import {
   $tabIndex,
   $text,
   $toHTML,
+  $toPages,
   $toStyle,
   $uid,
   ContentObject,
@@ -76,6 +77,7 @@ import {
   createWrapper,
   fixDimensions,
   fixTextIndent,
+  fixURL,
   isPrintOnly,
   layoutClass,
   layoutNode,
@@ -100,6 +102,7 @@ import {
 } from "./utils.js";
 import { stringToBytes, Util, warn } from "../../shared/util.js";
 import { getMetrics } from "./fonts.js";
+import { recoverJsURL } from "../core_utils.js";
 import { searchNode } from "./som.js";
 
 const TEMPLATE_NS_ID = NamespaceIds.template.id;
@@ -136,6 +139,7 @@ const MIMES = new Set([
   "image/x-ms-bmp",
   "image/tiff",
   "image/tif",
+  "application/octet-stream",
 ]);
 
 const IMAGES_HEADERS = [
@@ -366,23 +370,32 @@ function handleBreak(node) {
   const pageArea = target && target[$getParent]();
 
   let index;
+  let nextPageArea = pageArea;
   if (node.startNew) {
+    // startNew === 1 so we must create a new container (pageArea or
+    // contentArea).
     if (target) {
       const contentAreas = pageArea.contentArea.children;
-      index = contentAreas.findIndex(e => e === target) - 1;
+      const indexForCurrent = contentAreas.indexOf(currentContentArea);
+      const indexForTarget = contentAreas.indexOf(target);
+      if (indexForCurrent !== -1 && indexForCurrent < indexForTarget) {
+        // The next container is after the current container so
+        // we can stay on the same page.
+        nextPageArea = null;
+      }
+      index = indexForTarget - 1;
     } else {
-      index = currentPageArea.contentArea.children.findIndex(
-        e => e === currentContentArea
-      );
+      index = currentPageArea.contentArea.children.indexOf(currentContentArea);
     }
   } else if (target && target !== currentContentArea) {
     const contentAreas = pageArea.contentArea.children;
-    index = contentAreas.findIndex(e => e === target) - 1;
+    index = contentAreas.indexOf(target) - 1;
+    nextPageArea = pageArea === currentPageArea ? null : pageArea;
   } else {
     return false;
   }
 
-  node[$extra].target = pageArea === currentPageArea ? null : pageArea;
+  node[$extra].target = nextPageArea;
   node[$extra].index = index;
   return true;
 }
@@ -1066,7 +1079,10 @@ class Button extends XFAObject {
 
   [$toHTML](availableSpace) {
     // TODO: highlight.
-    return HTMLResult.success({
+
+    const parent = this[$getParent]();
+    const grandpa = parent[$getParent]();
+    const htmlButton = {
       name: "button",
       attributes: {
         id: this[$uid],
@@ -1074,7 +1090,37 @@ class Button extends XFAObject {
         style: {},
       },
       children: [],
-    });
+    };
+
+    for (const event of grandpa.event.children) {
+      // if (true) break;
+      if (event.activity !== "click" || !event.script) {
+        continue;
+      }
+      const jsURL = recoverJsURL(event.script[$content]);
+      if (!jsURL) {
+        continue;
+      }
+      const href = fixURL(jsURL.url);
+      if (!href) {
+        continue;
+      }
+
+      // we've an url so generate a <a>
+      htmlButton.children.push({
+        name: "a",
+        attributes: {
+          id: "link" + this[$uid],
+          href,
+          newWindow: jsURL.newWindow,
+          class: ["xfaLink"],
+          style: {},
+        },
+        children: [],
+      });
+    }
+
+    return HTMLResult.success(htmlButton);
   }
 }
 
@@ -2897,7 +2943,12 @@ class Field extends XFAObject {
       ui.attributes.style = Object.create(null);
     }
 
+    let aElement = null;
+
     if (this.ui.button) {
+      if (ui.children.length === 1) {
+        [aElement] = ui.children.splice(0, 1);
+      }
       Object.assign(ui.attributes.style, borderStyle);
     } else {
       Object.assign(style, borderStyle);
@@ -2953,6 +3004,10 @@ class Field extends XFAObject {
       } else {
         ui.children[0].attributes.style.height = "100%";
       }
+    }
+
+    if (aElement) {
+      ui.children.push(aElement);
     }
 
     if (!caption) {
@@ -4886,12 +4941,6 @@ class Subform extends XFAObject {
       return false;
     }
 
-    const contentArea = this[$getTemplateRoot]()[$extra].currentContentArea;
-
-    if (this.overflow && this.overflow[$getExtra]().target === contentArea) {
-      return false;
-    }
-
     if (this[$extra]._isSplittable !== undefined) {
       return this[$extra]._isSplittable;
     }
@@ -5025,17 +5074,7 @@ class Subform extends XFAObject {
     });
 
     const root = this[$getTemplateRoot]();
-    const currentContentArea = root[$extra].currentContentArea;
     const savedNoLayoutFailure = root[$extra].noLayoutFailure;
-
-    if (this.overflow) {
-      // In case of overflow in the current content area,
-      // elements must be kept in this subform so it implies
-      // to have no errors on layout failures.
-      root[$extra].noLayoutFailure =
-        root[$extra].noLayoutFailure ||
-        this.overflow[$getExtra]().target === currentContentArea;
-    }
 
     const isSplittable = this[$isSplittable]();
     if (!isSplittable) {
@@ -5177,6 +5216,13 @@ class Subform extends XFAObject {
     }
     if (this.h === "") {
       style.height = measureToString(height);
+    }
+
+    if (
+      (style.width === "0px" || style.height === "0px") &&
+      children.length === 0
+    ) {
+      return HTMLResult.EMPTY;
     }
 
     const html = {
@@ -5366,7 +5412,12 @@ class Template extends XFAObject {
     return searchNode(this, container, expr, true, true);
   }
 
-  [$toHTML]() {
+  /**
+   * This function is a generator because the conversion into
+   * pages is done asynchronously and we want to save the state
+   * of the function where we were in the previous iteration.
+   */
+  *[$toPages]() {
     if (!this.subform.children.length) {
       return HTMLResult.success({
         name: "div",
@@ -5522,7 +5573,7 @@ class Template extends XFAObject {
               hasSomething ||
               (html.html.children && html.html.children.length !== 0);
             htmlContentAreas[i].children.push(html.html);
-          } else if (!hasSomething) {
+          } else if (!hasSomething && mainHtml.children.length > 1) {
             mainHtml.children.pop();
           }
           return mainHtml;
@@ -5572,6 +5623,8 @@ class Template extends XFAObject {
 
           flush(i);
 
+          const currentIndex = i;
+
           i = Infinity;
           if (target instanceof PageArea) {
             // We must stop the contentAreas filling and go to the next page.
@@ -5579,9 +5632,15 @@ class Template extends XFAObject {
           } else if (target instanceof ContentArea) {
             const index = contentAreas.findIndex(e => e === target);
             if (index !== -1) {
-              // In the next loop iteration `i` will be incremented, note the
-              // `continue` just below, hence we need to subtract one here.
-              i = index - 1;
+              if (index > currentIndex) {
+                // In the next loop iteration `i` will be incremented, note the
+                // `continue` just below, hence we need to subtract one here.
+                i = index - 1;
+              } else {
+                // The targetted contentArea has already been filled
+                // so create a new page.
+                startIndex = index;
+              }
             } else {
               targetPageArea = target[$getParent]();
               startIndex = targetPageArea.contentArea.children.findIndex(
@@ -5604,6 +5663,7 @@ class Template extends XFAObject {
         }
       }
       pageArea = targetPageArea || pageArea[$getNextPage]();
+      yield null;
     }
   }
 }

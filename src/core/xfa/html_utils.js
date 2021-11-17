@@ -26,10 +26,10 @@ import {
   $toStyle,
   XFAObject,
 } from "./xfa_object.js";
+import { createValidAbsoluteUrl, warn } from "../../shared/util.js";
 import { getMeasurement, stripQuotes } from "./utils.js";
 import { selectFont } from "./fonts.js";
 import { TextMeasure } from "./text.js";
-import { warn } from "../../shared/util.js";
 
 function measureToString(m) {
   if (typeof m === "string") {
@@ -238,7 +238,7 @@ function layoutNode(node, availableSpace) {
     if (!font) {
       const root = node[$getTemplateRoot]();
       let parent = node[$getParent]();
-      while (parent !== root) {
+      while (parent && parent !== root) {
         if (parent.font) {
           font = parent.font;
           break;
@@ -606,10 +606,16 @@ function setPara(node, nodeStyle, value) {
 }
 
 function setFontFamily(xfaFont, node, fontFinder, style) {
-  const name = stripQuotes(xfaFont.typeface);
-  const typeface = fontFinder.find(name);
+  if (!fontFinder) {
+    // The font cannot be found in the pdf so use the default one.
+    delete style.fontFamily;
+    return;
+  }
 
+  const name = stripQuotes(xfaFont.typeface);
   style.fontFamily = `"${name}"`;
+
+  const typeface = fontFinder.find(name);
   if (typeface) {
     const { fontFamily } = typeface.regular.cssFontInfo;
     if (fontFamily !== name) {
@@ -633,11 +639,20 @@ function setFontFamily(xfaFont, node, fontFinder, style) {
   }
 }
 
+function fixURL(str) {
+  const absoluteUrl = createValidAbsoluteUrl(str, /* baseUrl = */ null, {
+    addDefaultProtocol: true,
+    tryConvertEncoding: true,
+  });
+  return absoluteUrl ? absoluteUrl.href : null;
+}
+
 export {
   computeBbox,
   createWrapper,
   fixDimensions,
   fixTextIndent,
+  fixURL,
   isPrintOnly,
   layoutClass,
   layoutNode,

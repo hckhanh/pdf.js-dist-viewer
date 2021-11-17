@@ -18,12 +18,12 @@
 import {
   AnnotationMode,
   createPromiseCapability,
+  PixelsPerInch,
   RenderingCancelledException,
   SVGGraphics,
 } from "pdfjs-lib";
 import {
   approximateFraction,
-  CSS_UNITS,
   DEFAULT_SCALE,
   getOutputScale,
   RendererType,
@@ -36,7 +36,7 @@ import { RenderingStates } from "./pdf_rendering_queue.js";
 
 /**
  * @typedef {Object} PDFPageViewOptions
- * @property {HTMLDivElement} container - The viewer element.
+ * @property {HTMLDivElement} [container] - The viewer element.
  * @property {EventBus} eventBus - The application event bus.
  * @property {number} id - The page unique ID (normally its number).
  * @property {number} scale - The page scale display.
@@ -123,6 +123,8 @@ class PDFPageView {
     this._renderError = null;
     this._isStandalone = !this.renderingQueue?.hasViewer();
 
+    this._annotationCanvasMap = null;
+
     this.annotationLayer = null;
     this.textLayer = null;
     this.zoomLayer = null;
@@ -140,7 +142,7 @@ class PDFPageView {
     });
     this.div = div;
 
-    container.appendChild(div);
+    container?.appendChild(div);
   }
 
   setPdfPage(pdfPage) {
@@ -149,7 +151,7 @@ class PDFPageView {
 
     const totalRotation = (this.rotation + this.pdfPageRotate) % 360;
     this.viewport = pdfPage.getViewport({
-      scale: this.scale * CSS_UNITS,
+      scale: this.scale * PixelsPerInch.PDF_TO_CSS_UNITS,
       rotation: totalRotation,
     });
     this.reset();
@@ -322,16 +324,19 @@ class PDFPageView {
     if (optionalContentConfigPromise instanceof Promise) {
       this._optionalContentConfigPromise = optionalContentConfigPromise;
     }
-    if (this._isStandalone) {
-      const doc = document.documentElement;
-      doc.style.setProperty("--zoom-factor", this.scale);
-    }
 
     const totalRotation = (this.rotation + this.pdfPageRotate) % 360;
+    const viewportScale = this.scale * PixelsPerInch.PDF_TO_CSS_UNITS;
     this.viewport = this.viewport.clone({
-      scale: this.scale * CSS_UNITS,
+      scale: viewportScale,
       rotation: totalRotation,
     });
+
+    if (this._isStandalone) {
+      const { style } = document.documentElement;
+      style.setProperty("--zoom-factor", this.scale);
+      style.setProperty("--viewport-scale-factor", viewportScale);
+    }
 
     if (this.svg) {
       this.cssTransform({
@@ -418,6 +423,7 @@ class PDFPageView {
     ) {
       this.annotationLayer.cancel();
       this.annotationLayer = null;
+      this._annotationCanvasMap = null;
     }
     if (this.xfaLayer && (!keepXfaLayer || !this.xfaLayer.div)) {
       this.xfaLayer.cancel();
@@ -580,6 +586,27 @@ class PDFPageView {
     }
     this.textLayer = textLayer;
 
+    if (
+      this._annotationMode !== AnnotationMode.DISABLE &&
+      this.annotationLayerFactory
+    ) {
+      this._annotationCanvasMap ||= new Map();
+      this.annotationLayer ||=
+        this.annotationLayerFactory.createAnnotationLayerBuilder(
+          div,
+          pdfPage,
+          /* annotationStorage = */ null,
+          this.imageResourcesPath,
+          this._annotationMode === AnnotationMode.ENABLE_FORMS,
+          this.l10n,
+          /* enableScripting = */ null,
+          /* hasJSActionsPromise = */ null,
+          /* mouseState = */ null,
+          /* fieldObjectsPromise = */ null,
+          /* annotationCanvasMap */ this._annotationCanvasMap
+        );
+    }
+
     if (this.xfaLayer?.div) {
       // The xfa layer needs to stay on top.
       div.appendChild(this.xfaLayer.div);
@@ -653,33 +680,16 @@ class PDFPageView {
             textLayer.setTextContentStream(readableStream);
             textLayer.render();
           }
+
+          if (this.annotationLayer) {
+            this._renderAnnotationLayer();
+          }
         });
       },
       function (reason) {
         return finishPaintTask(reason);
       }
     );
-
-    if (
-      this._annotationMode !== AnnotationMode.DISABLE &&
-      this.annotationLayerFactory
-    ) {
-      if (!this.annotationLayer) {
-        this.annotationLayer =
-          this.annotationLayerFactory.createAnnotationLayerBuilder(
-            div,
-            pdfPage,
-            /* annotationStorage = */ null,
-            this.imageResourcesPath,
-            this._annotationMode === AnnotationMode.ENABLE_FORMS,
-            this.l10n,
-            /* enableScripting = */ null,
-            /* hasJSActionsPromise = */ null,
-            /* mouseState = */ null
-          );
-      }
-      this._renderAnnotationLayer();
-    }
 
     if (this.xfaLayerFactory) {
       if (!this.xfaLayer) {
@@ -774,7 +784,9 @@ class PDFPageView {
     this.outputScale = outputScale;
 
     if (this.useOnlyCssZoom) {
-      const actualSizeViewport = viewport.clone({ scale: CSS_UNITS });
+      const actualSizeViewport = viewport.clone({
+        scale: PixelsPerInch.PDF_TO_CSS_UNITS,
+      });
       // Use a scale that makes the canvas have the originally intended size
       // of the page.
       outputScale.sx *= actualSizeViewport.width / viewport.width;
@@ -801,6 +813,7 @@ class PDFPageView {
     canvas.height = roundToDivide(viewport.height * outputScale.sy, sfy[0]);
     canvas.style.width = roundToDivide(viewport.width, sfx[1]) + "px";
     canvas.style.height = roundToDivide(viewport.height, sfy[1]) + "px";
+
     // Add the viewport so it's known what it was originally drawn with.
     this.paintedViewportMap.set(canvas, viewport);
 
@@ -814,6 +827,7 @@ class PDFPageView {
       viewport: this.viewport,
       annotationMode: this._annotationMode,
       optionalContentConfigPromise: this._optionalContentConfigPromise,
+      annotationCanvasMap: this._annotationCanvasMap,
     };
     const renderTask = this.pdfPage.render(renderContext);
     renderTask.onContinue = function (cont) {
@@ -828,7 +842,7 @@ class PDFPageView {
     renderTask.promise.then(
       function () {
         showCanvas();
-        renderCapability.resolve(undefined);
+        renderCapability.resolve();
       },
       function (error) {
         showCanvas();
@@ -863,10 +877,12 @@ class PDFPageView {
     };
 
     const pdfPage = this.pdfPage;
-    const actualSizeViewport = this.viewport.clone({ scale: CSS_UNITS });
+    const actualSizeViewport = this.viewport.clone({
+      scale: PixelsPerInch.PDF_TO_CSS_UNITS,
+    });
     const promise = pdfPage
       .getOperatorList({
-        annotationMode: this._annotatationMode,
+        annotationMode: this._annotationMode,
       })
       .then(opList => {
         ensureNotCancelled();

@@ -20,6 +20,7 @@ import {
   $content,
   $extra,
   $getChildren,
+  $getParent,
   $globalData,
   $nodeName,
   $onText,
@@ -29,10 +30,16 @@ import {
   XmlObject,
 } from "./xfa_object.js";
 import { $buildXFAObject, NamespaceIds } from "./namespaces.js";
-import { fixTextIndent, measureToString, setFontFamily } from "./html_utils.js";
+import {
+  fixTextIndent,
+  fixURL,
+  measureToString,
+  setFontFamily,
+} from "./html_utils.js";
 import { getMeasurement, HTMLResult, stripQuotes } from "./utils.js";
 
 const XHTML_NS_ID = NamespaceIds.xhtml.id;
+const $richText = Symbol();
 
 const VALID_STYLES = new Set([
   "color",
@@ -104,6 +111,7 @@ const StyleMapping = new Map([
 
 const spacesRegExp = /\s+/g;
 const crlfRegExp = /[\r\n]+/g;
+const crlfForRichTextRegExp = /\r\n?/g;
 
 function mapStyle(styleStr, node) {
   const style = Object.create(null);
@@ -180,6 +188,7 @@ const NoWhites = new Set(["body", "html"]);
 class XhtmlObject extends XmlObject {
   constructor(attributes, name) {
     super(XHTML_NS_ID, name);
+    this[$richText] = false;
     this.style = attributes.style || "";
   }
 
@@ -192,11 +201,16 @@ class XhtmlObject extends XmlObject {
     return !NoWhites.has(this[$nodeName]);
   }
 
-  [$onText](str) {
-    str = str.replace(crlfRegExp, "");
-    if (!this.style.includes("xfa-spacerun:yes")) {
-      str = str.replace(spacesRegExp, " ");
+  [$onText](str, richText = false) {
+    if (!richText) {
+      str = str.replace(crlfRegExp, "");
+      if (!this.style.includes("xfa-spacerun:yes")) {
+        str = str.replace(spacesRegExp, " ");
+      }
+    } else {
+      this[$richText] = true;
     }
+
     if (str) {
       this[$content] += str;
     }
@@ -306,6 +320,15 @@ class XhtmlObject extends XmlObject {
       return HTMLResult.EMPTY;
     }
 
+    let value;
+    if (this[$richText]) {
+      value = this[$content]
+        ? this[$content].replace(crlfForRichTextRegExp, "\n")
+        : undefined;
+    } else {
+      value = this[$content] || undefined;
+    }
+
     return HTMLResult.success({
       name: this[$nodeName],
       attributes: {
@@ -313,7 +336,7 @@ class XhtmlObject extends XmlObject {
         style: mapStyle(this.style, this),
       },
       children,
-      value: this[$content] || "",
+      value,
     });
   }
 }
@@ -321,7 +344,7 @@ class XhtmlObject extends XmlObject {
 class A extends XhtmlObject {
   constructor(attributes) {
     super(attributes, "a");
-    this.href = attributes.href || "";
+    this.href = fixURL(attributes.href) || "";
   }
 }
 
@@ -452,6 +475,10 @@ class P extends XhtmlObject {
   }
 
   [$text]() {
+    const siblings = this[$getParent]()[$getChildren]();
+    if (siblings[siblings.length - 1] === this) {
+      return super[$text]();
+    }
     return super[$text]() + "\n";
   }
 }
