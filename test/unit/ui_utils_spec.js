@@ -21,6 +21,7 @@ import {
   getVisibleElements,
   isPortraitOrientation,
   isValidRotation,
+  moveToEndOfArray,
   parseQueryString,
   waitOnEventOrTimeout,
   WaitOnType,
@@ -496,8 +497,7 @@ describe("ui_utils", function () {
     // This is a reimplementation of getVisibleElements without the
     // optimizations.
     function slowGetVisibleElements(scroll, pages) {
-      const views = [],
-        ids = new Set();
+      const views = [];
       const { scrollLeft, scrollTop } = scroll;
       const scrollRight = scrollLeft + scroll.clientWidth;
       const scrollBottom = scrollTop + scroll.clientHeight;
@@ -535,10 +535,9 @@ describe("ui_utils", function () {
             percent,
             widthPercent: (fractionWidth * 100) | 0,
           });
-          ids.add(view.id);
         }
       }
-      return { first: views[0], last: views[views.length - 1], views, ids };
+      return { first: views[0], last: views[views.length - 1], views };
     }
 
     // This function takes a fixed layout of pages and compares the system under
@@ -700,7 +699,6 @@ describe("ui_utils", function () {
         first: undefined,
         last: undefined,
         views: [],
-        ids: new Set(),
       });
     });
 
@@ -717,7 +715,6 @@ describe("ui_utils", function () {
         first: undefined,
         last: undefined,
         views: [],
-        ids: new Set(),
       });
     });
 
@@ -861,6 +858,46 @@ describe("ui_utils", function () {
           backtrackBeforeAllVisibleElements(bsResult, pages, top2)
         ).toEqual(4);
       });
+    });
+  });
+
+  describe("moveToEndOfArray", function () {
+    it("works on empty arrays", function () {
+      const data = [];
+      moveToEndOfArray(data, function () {});
+      expect(data).toEqual([]);
+    });
+
+    it("works when moving everything", function () {
+      const data = [1, 2, 3, 4, 5];
+      moveToEndOfArray(data, function () {
+        return true;
+      });
+      expect(data).toEqual([1, 2, 3, 4, 5]);
+    });
+
+    it("works when moving some things", function () {
+      const data = [1, 2, 3, 4, 5];
+      moveToEndOfArray(data, function (x) {
+        return x % 2 === 0;
+      });
+      expect(data).toEqual([1, 3, 5, 2, 4]);
+    });
+
+    it("works when moving one thing", function () {
+      const data = [1, 2, 3, 4, 5];
+      moveToEndOfArray(data, function (x) {
+        return x === 1;
+      });
+      expect(data).toEqual([2, 3, 4, 5, 1]);
+    });
+
+    it("works when moving nothing", function () {
+      const data = [1, 2, 3, 4, 5];
+      moveToEndOfArray(data, function (x) {
+        return x === 0;
+      });
+      expect(data).toEqual([1, 2, 3, 4, 5]);
     });
   });
 });

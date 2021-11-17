@@ -54,7 +54,6 @@ async function initializePDFJS(callback) {
       "pdfjs-test/unit/annotation_spec.js",
       "pdfjs-test/unit/annotation_storage_spec.js",
       "pdfjs-test/unit/api_spec.js",
-      "pdfjs-test/unit/base_viewer_spec.js",
       "pdfjs-test/unit/bidi_spec.js",
       "pdfjs-test/unit/cff_parser_spec.js",
       "pdfjs-test/unit/cmap_spec.js",

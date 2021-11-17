@@ -77,11 +77,7 @@ eventBus.on("pagesinit", function () {
 
   // We can try searching for things.
   if (SEARCH_FOR) {
-    if (!pdfFindController._onFind) {
-      pdfFindController.executeCommand("find", { query: SEARCH_FOR });
-    } else {
-      eventBus.dispatch("find", { type: "", query: SEARCH_FOR });
-    }
+    pdfFindController.executeCommand("find", { query: SEARCH_FOR });
   }
 });
 
@@ -92,11 +88,10 @@ const loadingTask = pdfjsLib.getDocument({
   cMapPacked: CMAP_PACKED,
   enableXfa: ENABLE_XFA,
 });
-(async function () {
-  const pdfDocument = await loadingTask.promise;
+loadingTask.promise.then(function (pdfDocument) {
   // Document loaded, specifying document for the viewer and
   // the (optional) linkService.
   pdfViewer.setDocument(pdfDocument);
 
   pdfLinkService.setDocument(pdfDocument, null);
-})();
+});

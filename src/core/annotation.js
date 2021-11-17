@@ -26,7 +26,6 @@ import {
   isAscii,
   isString,
   OPS,
-  RenderingIntentFlag,
   shadow,
   stringToPDFString,
   stringToUTF16BEString,
@@ -48,7 +47,6 @@ import {
   Name,
   RefSet,
 } from "./primitives.js";
-import { bidi } from "./bidi.js";
 import { Catalog } from "./catalog.js";
 import { ColorSpace } from "./colorspace.js";
 import { FileSpec } from "./file_spec.js";
@@ -56,7 +54,6 @@ import { ObjectLoader } from "./object_loader.js";
 import { OperatorList } from "./operator_list.js";
 import { StringStream } from "./stream.js";
 import { writeDict } from "./writer.js";
-import { XFAFactory } from "./xfa/factory.js";
 
 class AnnotationFactory {
   /**
@@ -233,12 +230,12 @@ class AnnotationFactory {
   }
 }
 
-function getRgbColor(color, defaultColor = new Uint8ClampedArray(3)) {
+function getRgbColor(color) {
+  const rgbColor = new Uint8ClampedArray(3);
   if (!Array.isArray(color)) {
-    return defaultColor;
+    return rgbColor;
   }
 
-  const rgbColor = defaultColor || new Uint8ClampedArray(3);
   switch (color.length) {
     case 0: // Transparent, which we indicate with a null value
       return null;
@@ -256,7 +253,7 @@ function getRgbColor(color, defaultColor = new Uint8ClampedArray(3)) {
       return rgbColor;
 
     default:
-      return defaultColor;
+      return rgbColor;
   }
 }
 
@@ -359,7 +356,6 @@ class Annotation {
   constructor(params) {
     const dict = params.dict;
 
-    this.setTitle(dict.get("T"));
     this.setContents(dict.get("Contents"));
     this.setModificationDate(dict.get("M"));
     this.setFlags(dict.get("F"));
@@ -367,7 +363,6 @@ class Annotation {
     this.setColor(dict.getArray("C"));
     this.setBorderStyle(dict);
     this.setAppearance(dict);
-    this.setBorderAndBackgroundColors(dict.get("MK"));
 
     this._streams = [];
     if (this.appearance) {
@@ -379,15 +374,12 @@ class Annotation {
       annotationFlags: this.flags,
       borderStyle: this.borderStyle,
       color: this.color,
-      backgroundColor: this.backgroundColor,
-      borderColor: this.borderColor,
-      contentsObj: this._contents,
+      contents: this.contents,
       hasAppearance: !!this.appearance,
       id: params.id,
       modificationDate: this.modificationDate,
       rect: this.rectangle,
       subtype: params.subtype,
-      hasOwnCanvas: false,
     };
 
     if (params.collectFields) {
@@ -509,34 +501,16 @@ class Annotation {
   }
 
   /**
-   * @private
-   */
-  _parseStringHelper(data) {
-    const str = typeof data === "string" ? stringToPDFString(data) : "";
-    const dir = str && bidi(str).dir === "rtl" ? "rtl" : "ltr";
-
-    return { str, dir };
-  }
-
-  /**
-   * Set the title.
-   *
-   * @param {string} title - The title of the annotation, used e.g. with
-   *   PopupAnnotations.
-   */
-  setTitle(title) {
-    this._title = this._parseStringHelper(title);
-  }
-
-  /**
    * Set the contents.
    *
+   * @public
+   * @memberof Annotation
    * @param {string} contents - Text to display for the annotation or, if the
    *                            type of annotation does not display text, a
    *                            description of the annotation's contents
    */
   setContents(contents) {
-    this._contents = this._parseStringHelper(contents);
+    this.contents = stringToPDFString(contents || "");
   }
 
   /**
@@ -610,23 +584,6 @@ class Annotation {
   }
 
   /**
-   * Set the color for background and border if any.
-   * The default values are transparent.
-   *
-   * @public
-   * @memberof Annotation
-   * @param {Dict} mk - The MK dictionary
-   */
-  setBorderAndBackgroundColors(mk) {
-    if (mk instanceof Dict) {
-      this.borderColor = getRgbColor(mk.getArray("BC"), null);
-      this.backgroundColor = getRgbColor(mk.getArray("BG"), null);
-    } else {
-      this.borderColor = this.backgroundColor = null;
-    }
-  }
-
-  /**
    * Set the border style (as AnnotationBorderStyle object).
    *
    * @public
@@ -663,7 +620,7 @@ class Annotation {
 
         if (array.length === 4) {
           // Dash array available
-          this.borderStyle.setDashArray(array[3], /* forceStyle = */ true);
+          this.borderStyle.setDashArray(array[3]);
         }
       }
     } else {
@@ -710,8 +667,8 @@ class Annotation {
     this.appearance = normalAppearanceState.get(as.name);
   }
 
-  loadResources(keys, appearance) {
-    return appearance.dict.getAsync("Resources").then(resources => {
+  loadResources(keys) {
+    return this.appearance.dict.getAsync("Resources").then(resources => {
       if (!resources) {
         return undefined;
       }
@@ -723,24 +680,22 @@ class Annotation {
     });
   }
 
-  getOperatorList(evaluator, task, intent, renderForms, annotationStorage) {
-    const data = this.data;
-    let appearance = this.appearance;
-    const isUsingOwnCanvas =
-      data.hasOwnCanvas && intent & RenderingIntentFlag.DISPLAY;
-    if (!appearance) {
-      if (!isUsingOwnCanvas) {
-        return Promise.resolve(new OperatorList());
-      }
-      appearance = new StringStream("");
-      appearance.dict = new Dict();
+  getOperatorList(evaluator, task, renderForms, annotationStorage) {
+    if (!this.appearance) {
+      return Promise.resolve(new OperatorList());
     }
 
+    const appearance = this.appearance;
+    const data = this.data;
     const appearanceDict = appearance.dict;
-    const resourcesPromise = this.loadResources(
-      ["ExtGState", "ColorSpace", "Pattern", "Shading", "XObject", "Font"],
-      appearance
-    );
+    const resourcesPromise = this.loadResources([
+      "ExtGState",
+      "ColorSpace",
+      "Pattern",
+      "Shading",
+      "XObject",
+      "Font",
+    ]);
     const bbox = appearanceDict.getArray("BBox") || [0, 0, 1, 1];
     const matrix = appearanceDict.getArray("Matrix") || [1, 0, 0, 1, 0, 0];
     const transform = getTransformMatrix(data.rect, bbox, matrix);
@@ -752,7 +707,6 @@ class Annotation {
         data.rect,
         transform,
         matrix,
-        isUsingOwnCanvas,
       ]);
 
       return evaluator
@@ -791,8 +745,6 @@ class Annotation {
         id: this.data.id,
         actions: this.data.actions,
         name: this.data.fieldName,
-        strokeColor: this.data.borderColor,
-        fillColor: this.data.backgroundColor,
         type: "",
         kidIds: this.data.kidIds,
         page: this.data.pageIndex,
@@ -987,9 +939,8 @@ class AnnotationBorderStyle {
    * @public
    * @memberof AnnotationBorderStyle
    * @param {Array} dashArray - The dash array with at least one element
-   * @param {boolean} [forceStyle]
    */
-  setDashArray(dashArray, forceStyle = false) {
+  setDashArray(dashArray) {
     // We validate the dash array, but we do not use it because CSS does not
     // allow us to change spacing of dashes. For more information, visit
     // http://www.w3.org/TR/css3-background/#the-border-style.
@@ -1009,12 +960,6 @@ class AnnotationBorderStyle {
       }
       if (isValid && !allZeros) {
         this.dashArray = dashArray;
-
-        if (forceStyle) {
-          // Even though we cannot use the dash array in the display layer,
-          // at least ensure that we use the correct border-style.
-          this.setStyle(Name.get("D"));
-        }
       } else {
         this.width = 0; // Adobe behavior when the array is invalid.
       }
@@ -1069,11 +1014,10 @@ class MarkupAnnotation extends Annotation {
       // the group attributes from the primary annotation.
       const parent = dict.get("IRT");
 
-      this.setTitle(parent.get("T"));
-      this.data.titleObj = this._title;
+      this.data.title = stringToPDFString(parent.get("T") || "");
 
       this.setContents(parent.get("Contents"));
-      this.data.contentsObj = this._contents;
+      this.data.contents = this.contents;
 
       if (!parent.has("CreationDate")) {
         this.data.creationDate = null;
@@ -1099,7 +1043,7 @@ class MarkupAnnotation extends Annotation {
         this.data.color = this.color;
       }
     } else {
-      this.data.titleObj = this._title;
+      this.data.title = stringToPDFString(dict.get("T") || "");
 
       this.setCreationDate(dict.get("CreationDate"));
       this.data.creationDate = this.creationDate;
@@ -1110,10 +1054,6 @@ class MarkupAnnotation extends Annotation {
         // Fall back to the default background color.
         this.data.color = null;
       }
-    }
-
-    if (dict.has("RC")) {
-      this.data.richText = XFAFactory.getRichTextAsHtml(dict.get("RC"));
     }
   }
 
@@ -1334,7 +1274,7 @@ class WidgetAnnotation extends Annotation {
     return !!(this.data.fieldFlags & flag);
   }
 
-  getOperatorList(evaluator, task, intent, renderForms, annotationStorage) {
+  getOperatorList(evaluator, task, renderForms, annotationStorage) {
     // Do not render form elements on the canvas when interactive forms are
     // enabled. The display layer is responsible for rendering them instead.
     if (renderForms && !(this instanceof SignatureWidgetAnnotation)) {
@@ -1345,7 +1285,6 @@ class WidgetAnnotation extends Annotation {
       return super.getOperatorList(
         evaluator,
         task,
-        intent,
         renderForms,
         annotationStorage
       );
@@ -1357,7 +1296,6 @@ class WidgetAnnotation extends Annotation {
           return super.getOperatorList(
             evaluator,
             task,
-            intent,
             renderForms,
             annotationStorage
           );
@@ -1915,8 +1853,6 @@ class TextWidgetAnnotation extends WidgetAnnotation {
       rect: this.data.rect,
       actions: this.data.actions,
       page: this.data.pageIndex,
-      strokeColor: this.data.borderColor,
-      fillColor: this.data.backgroundColor,
       type: "text",
     };
   }
@@ -1943,77 +1879,63 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
     } else if (this.data.radioButton) {
       this._processRadioButton(params);
     } else if (this.data.pushButton) {
-      this.data.hasOwnCanvas = true;
       this._processPushButton(params);
     } else {
       warn("Invalid field flags for button widget annotation");
     }
   }
 
-  async getOperatorList(
-    evaluator,
-    task,
-    intent,
-    renderForms,
-    annotationStorage
-  ) {
+  getOperatorList(evaluator, task, renderForms, annotationStorage) {
     if (this.data.pushButton) {
       return super.getOperatorList(
         evaluator,
         task,
-        intent,
         false, // we use normalAppearance to render the button
         annotationStorage
       );
     }
 
-    let value = null;
     if (annotationStorage) {
       const storageEntry = annotationStorage.get(this.data.id);
-      value = storageEntry ? storageEntry.value : null;
-    }
-
-    if (value === null) {
-      // Nothing in the annotationStorage.
-      if (this.appearance) {
-        // But we've a default appearance so use it.
+      const value = storageEntry && storageEntry.value;
+      if (value === undefined) {
         return super.getOperatorList(
           evaluator,
           task,
-          intent,
           renderForms,
           annotationStorage
         );
       }
 
-      // There is no default appearance so use the one derived
-      // from the field value.
-      if (this.data.checkBox) {
-        value = this.data.fieldValue === this.data.exportValue;
+      let appearance;
+      if (value) {
+        appearance = this.checkedAppearance;
       } else {
-        value = this.data.fieldValue === this.data.buttonValue;
+        appearance = this.uncheckedAppearance;
       }
-    }
 
-    const appearance = value
-      ? this.checkedAppearance
-      : this.uncheckedAppearance;
-    if (appearance) {
-      const savedAppearance = this.appearance;
-      this.appearance = appearance;
-      const operatorList = super.getOperatorList(
-        evaluator,
-        task,
-        intent,
-        renderForms,
-        annotationStorage
-      );
-      this.appearance = savedAppearance;
-      return operatorList;
-    }
+      if (appearance) {
+        const savedAppearance = this.appearance;
+        this.appearance = appearance;
+        const operatorList = super.getOperatorList(
+          evaluator,
+          task,
+          renderForms,
+          annotationStorage
+        );
+        this.appearance = savedAppearance;
+        return operatorList;
+      }
 
-    // No appearance
-    return new OperatorList();
+      // No appearance
+      return Promise.resolve(new OperatorList());
+    }
+    return super.getOperatorList(
+      evaluator,
+      task,
+      renderForms,
+      annotationStorage
+    );
   }
 
   async save(evaluator, task, annotationStorage) {
@@ -2039,7 +1961,7 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
       return null;
     }
 
-    const defaultValue = this.data.fieldValue === this.data.exportValue;
+    const defaultValue = this.data.fieldValue && this.data.fieldValue !== "Off";
     if (defaultValue === value) {
       return null;
     }
@@ -2150,64 +2072,6 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
     return newRefs;
   }
 
-  _getDefaultCheckedAppearance(params, type) {
-    const width = this.data.rect[2] - this.data.rect[0];
-    const height = this.data.rect[3] - this.data.rect[1];
-    const bbox = [0, 0, width, height];
-
-    // Ratio used to have a mark slightly smaller than the bbox.
-    const FONT_RATIO = 0.8;
-    const fontSize = Math.min(width, height) * FONT_RATIO;
-
-    // Char Metrics
-    // Widths came from widths for ZapfDingbats.
-    // Heights are guessed with Fontforge and FoxitDingbats.pfb.
-    let metrics, char;
-    if (type === "check") {
-      // Char 33 (2713 in unicode)
-      metrics = {
-        width: 0.755 * fontSize,
-        height: 0.705 * fontSize,
-      };
-      char = "\x33";
-    } else if (type === "disc") {
-      // Char 6C (25CF in unicode)
-      metrics = {
-        width: 0.791 * fontSize,
-        height: 0.705 * fontSize,
-      };
-      char = "\x6C";
-    } else {
-      unreachable(`_getDefaultCheckedAppearance - unsupported type: ${type}`);
-    }
-
-    // Values to center the glyph in the bbox.
-    const xShift = (width - metrics.width) / 2;
-    const yShift = (height - metrics.height) / 2;
-
-    const appearance = `q BT /PdfJsZaDb ${fontSize} Tf 0 g ${xShift} ${yShift} Td (${char}) Tj ET Q`;
-
-    const appearanceStreamDict = new Dict(params.xref);
-    appearanceStreamDict.set("FormType", 1);
-    appearanceStreamDict.set("Subtype", Name.get("Form"));
-    appearanceStreamDict.set("Type", Name.get("XObject"));
-    appearanceStreamDict.set("BBox", bbox);
-    appearanceStreamDict.set("Matrix", [1, 0, 0, 1, 0, 0]);
-    appearanceStreamDict.set("Length", appearance.length);
-
-    const resources = new Dict(params.xref);
-    const font = new Dict(params.xref);
-    font.set("PdfJsZaDb", this.fallbackFontDict);
-    resources.set("Font", font);
-
-    appearanceStreamDict.set("Resources", resources);
-
-    this.checkedAppearance = new StringStream(appearance);
-    this.checkedAppearance.dict = appearanceStreamDict;
-
-    this._streams.push(this.checkedAppearance);
-  }
-
   _processCheckBox(params) {
     const customAppearance = params.dict.get("AP");
     if (!isDict(customAppearance)) {
@@ -2226,46 +2090,27 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
       this.data.fieldValue = asValue;
     }
 
-    const yes =
-      this.data.fieldValue !== null && this.data.fieldValue !== "Off"
-        ? this.data.fieldValue
-        : "Yes";
-
     const exportValues = normalAppearance.getKeys();
-    if (exportValues.length === 0) {
-      exportValues.push("Off", yes);
-    } else if (exportValues.length === 1) {
-      if (exportValues[0] === "Off") {
-        exportValues.push(yes);
-      } else {
-        exportValues.unshift("Off");
-      }
-    } else if (exportValues.includes(yes)) {
-      exportValues.length = 0;
-      exportValues.push("Off", yes);
-    } else {
-      const otherYes = exportValues.find(v => v !== "Off");
-      exportValues.length = 0;
-      exportValues.push("Off", otherYes);
+    if (!exportValues.includes("Off")) {
+      // The /Off appearance is optional.
+      exportValues.push("Off");
     }
-
     // Don't use a "V" entry pointing to a non-existent appearance state,
     // see e.g. bug1720411.pdf where it's an *empty* Name-instance.
     if (!exportValues.includes(this.data.fieldValue)) {
-      this.data.fieldValue = "Off";
+      this.data.fieldValue = null;
+    }
+    if (exportValues.length !== 2) {
+      return;
     }
 
-    this.data.exportValue = exportValues[1];
+    this.data.exportValue =
+      exportValues[0] === "Off" ? exportValues[1] : exportValues[0];
 
-    this.checkedAppearance =
-      normalAppearance.get(this.data.exportValue) || null;
+    this.checkedAppearance = normalAppearance.get(this.data.exportValue);
     this.uncheckedAppearance = normalAppearance.get("Off") || null;
 
-    if (this.checkedAppearance) {
-      this._streams.push(this.checkedAppearance);
-    } else {
-      this._getDefaultCheckedAppearance(params, "check");
-    }
+    this._streams.push(this.checkedAppearance);
     if (this.uncheckedAppearance) {
       this._streams.push(this.uncheckedAppearance);
     }
@@ -2302,15 +2147,10 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
       }
     }
 
-    this.checkedAppearance =
-      normalAppearance.get(this.data.buttonValue) || null;
+    this.checkedAppearance = normalAppearance.get(this.data.buttonValue);
     this.uncheckedAppearance = normalAppearance.get("Off") || null;
 
-    if (this.checkedAppearance) {
-      this._streams.push(this.checkedAppearance);
-    } else {
-      this._getDefaultCheckedAppearance(params, "disc");
-    }
+    this._streams.push(this.checkedAppearance);
     if (this.uncheckedAppearance) {
       this._streams.push(this.uncheckedAppearance);
     }
@@ -2357,8 +2197,6 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
       hidden: this.data.hidden,
       actions: this.data.actions,
       page: this.data.pageIndex,
-      strokeColor: this.data.borderColor,
-      fillColor: this.data.backgroundColor,
       type,
     };
   }
@@ -2440,8 +2278,6 @@ class ChoiceWidgetAnnotation extends WidgetAnnotation {
       actions: this.data.actions,
       items: this.data.options,
       page: this.data.pageIndex,
-      strokeColor: this.data.borderColor,
-      fillColor: this.data.backgroundColor,
       type,
     };
   }
@@ -2569,15 +2405,8 @@ class PopupAnnotation extends Annotation {
       }
     }
 
-    this.setTitle(parentItem.get("T"));
-    this.data.titleObj = this._title;
-
-    this.setContents(parentItem.get("Contents"));
-    this.data.contentsObj = this._contents;
-
-    if (parentItem.has("RC")) {
-      this.data.richText = XFAFactory.getRichTextAsHtml(parentItem.get("RC"));
-    }
+    this.data.title = stringToPDFString(parentItem.get("T") || "");
+    this.data.contents = stringToPDFString(parentItem.get("Contents") || "");
   }
 }
 
@@ -2610,7 +2439,7 @@ class LineAnnotation extends MarkupAnnotation {
       let fillColor = null,
         interiorColor = parameters.dict.getArray("IC");
       if (interiorColor) {
-        interiorColor = getRgbColor(interiorColor, null);
+        interiorColor = getRgbColor(interiorColor);
         fillColor = interiorColor
           ? Array.from(interiorColor).map(c => c / 255)
           : null;
@@ -2674,17 +2503,12 @@ class SquareAnnotation extends MarkupAnnotation {
       let fillColor = null,
         interiorColor = parameters.dict.getArray("IC");
       if (interiorColor) {
-        interiorColor = getRgbColor(interiorColor, null);
+        interiorColor = getRgbColor(interiorColor);
         fillColor = interiorColor
           ? Array.from(interiorColor).map(c => c / 255)
           : null;
       }
       const fillAlpha = fillColor ? strokeAlpha : null;
-
-      if (this.borderStyle.width === 0 && !fillColor) {
-        // Prevent rendering a "hairline" border (fixes issue14164.pdf).
-        return;
-      }
 
       this._setDefaultAppearance({
         xref: parameters.xref,
@@ -2728,17 +2552,12 @@ class CircleAnnotation extends MarkupAnnotation {
       let fillColor = null;
       let interiorColor = parameters.dict.getArray("IC");
       if (interiorColor) {
-        interiorColor = getRgbColor(interiorColor, null);
+        interiorColor = getRgbColor(interiorColor);
         fillColor = interiorColor
           ? Array.from(interiorColor).map(c => c / 255)
           : null;
       }
       const fillAlpha = fillColor ? strokeAlpha : null;
-
-      if (this.borderStyle.width === 0 && !fillColor) {
-        // Prevent rendering a "hairline" border (fixes issue14164.pdf).
-        return;
-      }
 
       // Circles are approximated by Bézier curves with four segments since
       // there is no circle primitive in the PDF specification. For the control

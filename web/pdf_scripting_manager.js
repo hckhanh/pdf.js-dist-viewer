@@ -14,7 +14,7 @@
  */
 
 import { createPromiseCapability, shadow } from "pdfjs-lib";
-import { apiPageLayoutToViewerModes } from "./ui_utils.js";
+import { apiPageLayoutToSpreadMode } from "./ui_utils.js";
 import { RenderingStates } from "./pdf_rendering_queue.js";
 
 /**
@@ -287,11 +287,7 @@ class PDFScriptingManager {
           console.error(value);
           break;
         case "layout":
-          if (isInPresentationMode) {
-            return;
-          }
-          const modes = apiPageLayoutToViewerModes(value);
-          this._pdfViewer.spreadMode = modes.spreadMode;
+          this._pdfViewer.spreadMode = apiPageLayoutToSpreadMode(value);
           break;
         case "page-num":
           this._pdfViewer.currentPageNumber = value + 1;

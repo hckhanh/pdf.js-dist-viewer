@@ -14,7 +14,7 @@
  */
 
 import { getInteger, getKeyword, HTMLResult } from "./utils.js";
-import { shadow, utf8StringToString, warn } from "../../shared/util.js";
+import { shadow, warn } from "../../shared/util.js";
 import { encodeToXmlString } from "../core_utils.js";
 import { NamespaceIds } from "./namespaces.js";
 import { searchNode } from "./som.js";
@@ -84,7 +84,6 @@ const $setSetAttributes = Symbol();
 const $setValue = Symbol();
 const $tabIndex = Symbol();
 const $text = Symbol();
-const $toPages = Symbol();
 const $toHTML = Symbol();
 const $toString = Symbol();
 const $toStyle = Symbol();
@@ -819,12 +818,10 @@ class XmlObject extends XFAObject {
       buf.push(encodeToXmlString(this[$content]));
       return;
     }
-    const utf8TagName = utf8StringToString(tagName);
     const prefix = this[$namespaceId] === NS_DATASETS ? "xfa:" : "";
-    buf.push(`<${prefix}${utf8TagName}`);
+    buf.push(`<${prefix}${tagName}`);
     for (const [name, value] of this[_attributes].entries()) {
-      const utf8Name = utf8StringToString(name);
-      buf.push(` ${utf8Name}="${encodeToXmlString(value[$content])}"`);
+      buf.push(` ${name}="${encodeToXmlString(value[$content])}"`);
     }
     if (this[_dataValue] !== null) {
       if (this[_dataValue]) {
@@ -850,7 +847,7 @@ class XmlObject extends XFAObject {
         child[$toString](buf);
       }
     }
-    buf.push(`</${prefix}${utf8TagName}>`);
+    buf.push(`</${prefix}${tagName}>`);
   }
 
   [$onChild](child) {
@@ -1140,7 +1137,6 @@ export {
   $tabIndex,
   $text,
   $toHTML,
-  $toPages,
   $toString,
   $toStyle,
   $uid,

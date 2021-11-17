@@ -36,42 +36,48 @@ const THUMBNAIL_WIDTH = 98; // px
  * @property {IL10n} l10n - Localization service.
  */
 
-class TempImageFactory {
-  static #tempCanvas = null;
+const TempImageFactory = (function TempImageFactoryClosure() {
+  let tempCanvasCache = null;
 
-  static getCanvas(width, height) {
-    const tempCanvas = (this.#tempCanvas ||= document.createElement("canvas"));
-    tempCanvas.width = width;
-    tempCanvas.height = height;
+  return {
+    getCanvas(width, height) {
+      let tempCanvas = tempCanvasCache;
+      if (!tempCanvas) {
+        tempCanvas = document.createElement("canvas");
+        tempCanvasCache = tempCanvas;
+      }
+      tempCanvas.width = width;
+      tempCanvas.height = height;
 
-    // Since this is a temporary canvas, we need to fill it with a white
-    // background ourselves. `_getPageDrawContext` uses CSS rules for this.
-    if (
-      typeof PDFJSDev === "undefined" ||
-      PDFJSDev.test("MOZCENTRAL || GENERIC")
-    ) {
-      tempCanvas.mozOpaque = true;
-    }
+      // Since this is a temporary canvas, we need to fill it with a white
+      // background ourselves. `_getPageDrawContext` uses CSS rules for this.
+      if (
+        typeof PDFJSDev === "undefined" ||
+        PDFJSDev.test("MOZCENTRAL || GENERIC")
+      ) {
+        tempCanvas.mozOpaque = true;
+      }
 
-    const ctx = tempCanvas.getContext("2d", { alpha: false });
-    ctx.save();
-    ctx.fillStyle = "rgb(255, 255, 255)";
-    ctx.fillRect(0, 0, width, height);
-    ctx.restore();
-    return [tempCanvas, tempCanvas.getContext("2d")];
-  }
+      const ctx = tempCanvas.getContext("2d", { alpha: false });
+      ctx.save();
+      ctx.fillStyle = "rgb(255, 255, 255)";
+      ctx.fillRect(0, 0, width, height);
+      ctx.restore();
+      return [tempCanvas, tempCanvas.getContext("2d")];
+    },
 
-  static destroyCanvas() {
-    const tempCanvas = this.#tempCanvas;
-    if (tempCanvas) {
-      // Zeroing the width and height causes Firefox to release graphics
-      // resources immediately, which can greatly reduce memory consumption.
-      tempCanvas.width = 0;
-      tempCanvas.height = 0;
-    }
-    this.#tempCanvas = null;
-  }
-}
+    destroyCanvas() {
+      const tempCanvas = tempCanvasCache;
+      if (tempCanvas) {
+        // Zeroing the width and height causes Firefox to release graphics
+        // resources immediately, which can greatly reduce memory consumption.
+        tempCanvas.width = 0;
+        tempCanvas.height = 0;
+      }
+      tempCanvasCache = null;
+    },
+  };
+})();
 
 /**
  * @implements {IRenderableView}
@@ -272,7 +278,7 @@ class PDFThumbnailView {
   draw() {
     if (this.renderingState !== RenderingStates.INITIAL) {
       console.error("Must be in new state before drawing");
-      return Promise.resolve();
+      return Promise.resolve(undefined);
     }
     const { pdfPage } = this;
 

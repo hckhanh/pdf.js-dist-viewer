@@ -16,29 +16,25 @@
 import { objectFromMap } from "../shared/util.js";
 
 class Metadata {
-  #metadataMap;
-
-  #data;
-
   constructor({ parsedData, rawData }) {
-    this.#metadataMap = parsedData;
-    this.#data = rawData;
+    this._metadataMap = parsedData;
+    this._data = rawData;
   }
 
   getRaw() {
-    return this.#data;
+    return this._data;
   }
 
   get(name) {
-    return this.#metadataMap.get(name) ?? null;
+    return this._metadataMap.get(name) ?? null;
   }
 
   getAll() {
-    return objectFromMap(this.#metadataMap);
+    return objectFromMap(this._metadataMap);
   }
 
   has(name) {
-    return this.#metadataMap.has(name);
+    return this._metadataMap.has(name);
   }
 }
 

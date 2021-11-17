@@ -15,7 +15,6 @@
 
 /** @typedef {import("./interfaces").IPDFXfaLayerFactory} IPDFXfaLayerFactory */
 
-import { SimpleLinkService } from "./pdf_link_service.js";
 import { XfaLayer } from "pdfjs-lib";
 
 /**
@@ -23,7 +22,6 @@ import { XfaLayer } from "pdfjs-lib";
  * @property {HTMLDivElement} pageDiv
  * @property {PDFPage} pdfPage
  * @property {AnnotationStorage} [annotationStorage]
- * @property {IPDFLinkService} linkService
  * @property {Object} [xfaHtml]
  */
 
@@ -31,11 +29,10 @@ class XfaLayerBuilder {
   /**
    * @param {XfaLayerBuilderOptions} options
    */
-  constructor({ pageDiv, pdfPage, annotationStorage, linkService, xfaHtml }) {
+  constructor({ pageDiv, pdfPage, annotationStorage, xfaHtml }) {
     this.pageDiv = pageDiv;
     this.pdfPage = pdfPage;
     this.annotationStorage = annotationStorage;
-    this.linkService = linkService;
     this.xfaHtml = xfaHtml;
 
     this.div = null;
@@ -57,7 +54,6 @@ class XfaLayerBuilder {
         xfa: this.xfaHtml,
         page: null,
         annotationStorage: this.annotationStorage,
-        linkService: this.linkService,
         intent,
       };
 
@@ -84,7 +80,6 @@ class XfaLayerBuilder {
           xfa,
           page: this.pdfPage,
           annotationStorage: this.annotationStorage,
-          linkService: this.linkService,
           intent,
         };
 
@@ -134,7 +129,6 @@ class DefaultXfaLayerFactory {
       pageDiv,
       pdfPage,
       annotationStorage,
-      linkService: new SimpleLinkService(),
       xfaHtml,
     });
   }

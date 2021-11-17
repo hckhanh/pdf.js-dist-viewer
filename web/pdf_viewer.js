@@ -15,25 +15,63 @@
 
 import { ScrollMode, SpreadMode } from "./ui_utils.js";
 import { BaseViewer } from "./base_viewer.js";
+import { shadow } from "pdfjs-lib";
 
-class PDFViewer extends BaseViewer {}
-
-class PDFSinglePageViewer extends BaseViewer {
-  _resetView() {
-    super._resetView();
-    this._scrollMode = ScrollMode.PAGE;
-    this._spreadMode = SpreadMode.NONE;
+class PDFViewer extends BaseViewer {
+  get _viewerElement() {
+    return shadow(this, "_viewerElement", this.viewer);
   }
 
-  // eslint-disable-next-line accessor-pairs
-  set scrollMode(mode) {}
+  _scrollIntoView({ pageDiv, pageSpot = null, pageNumber = null }) {
+    if (!pageSpot && !this.isInPresentationMode) {
+      const left = pageDiv.offsetLeft + pageDiv.clientLeft;
+      const right = left + pageDiv.clientWidth;
+      const { scrollLeft, clientWidth } = this.container;
+      if (
+        this._isScrollModeHorizontal ||
+        left < scrollLeft ||
+        right > scrollLeft + clientWidth
+      ) {
+        pageSpot = { left: 0, top: 0 };
+      }
+    }
+    super._scrollIntoView({ pageDiv, pageSpot, pageNumber });
+  }
 
-  _updateScrollMode() {}
+  _getVisiblePages() {
+    if (this.isInPresentationMode) {
+      // The algorithm in `getVisibleElements` doesn't work in all browsers and
+      // configurations (e.g. Chrome) when Presentation Mode is active.
+      return this._getCurrentVisiblePage();
+    }
+    return super._getVisiblePages();
+  }
 
-  // eslint-disable-next-line accessor-pairs
-  set spreadMode(mode) {}
+  _updateHelper(visiblePages) {
+    if (this.isInPresentationMode) {
+      return;
+    }
+    let currentId = this._currentPageNumber;
+    let stillFullyVisible = false;
 
-  _updateSpreadMode() {}
+    for (const page of visiblePages) {
+      if (page.percent < 100) {
+        break;
+      }
+      if (
+        page.id === currentId &&
+        this._scrollMode === ScrollMode.VERTICAL &&
+        this._spreadMode === SpreadMode.NONE
+      ) {
+        stillFullyVisible = true;
+        break;
+      }
+    }
+    if (!stillFullyVisible) {
+      currentId = visiblePages[0].id;
+    }
+    this._setCurrentPageNumber(currentId);
+  }
 }
 
-export { PDFSinglePageViewer, PDFViewer };
+export { PDFViewer };

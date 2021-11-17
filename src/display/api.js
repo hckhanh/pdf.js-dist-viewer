@@ -1017,9 +1017,9 @@ class PDFDocumentProxy {
   }
 
   /**
-   * @returns {Promise<Object<string, Array<Object>> | null>} A promise that is
-   *   resolved with an {Object} containing /AcroForm field data for the JS
-   *   sandbox, or `null` when no field data is present in the PDF file.
+   * @returns {Promise<Array<Object> | null>} A promise that is resolved with an
+   *   {Array<Object>} containing /AcroForm field data for the JS sandbox,
+   *   or `null` when no field data is present in the PDF file.
    */
   getFieldObjects() {
     return this._transport.getFieldObjects();
@@ -1161,8 +1161,6 @@ class PDFDocumentProxy {
  *   created from `PDFDocumentProxy.getOptionalContentConfig`. If `null`,
  *   the configuration will be fetched automatically with the default visibility
  *   states set.
- * @property {Map<string, Canvas>} [annotationCanvasMap] - Map some annotation
- *   ids with canvases used to render them.
  */
 
 /**
@@ -1307,34 +1305,6 @@ class PDFPageProxy {
         intentArgs.renderingIntent
       );
       this._annotationPromises.set(intentArgs.cacheKey, promise);
-
-      if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
-        promise = promise.then(annotations => {
-          for (const annotation of annotations) {
-            if (annotation.titleObj !== undefined) {
-              Object.defineProperty(annotation, "title", {
-                get() {
-                  deprecated(
-                    "`title`-property on annotation, please use `titleObj` instead."
-                  );
-                  return annotation.titleObj.str;
-                },
-              });
-            }
-            if (annotation.contentsObj !== undefined) {
-              Object.defineProperty(annotation, "contents", {
-                get() {
-                  deprecated(
-                    "`contents`-property on annotation, please use `contentsObj` instead."
-                  );
-                  return annotation.contentsObj.str;
-                },
-              });
-            }
-          }
-          return annotations;
-        });
-      }
     }
     return promise;
   }
@@ -1376,7 +1346,6 @@ class PDFPageProxy {
     canvasFactory = null,
     background = null,
     optionalContentConfigPromise = null,
-    annotationCanvasMap = null,
   }) {
     if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("GENERIC")) {
       if (arguments[0]?.renderInteractiveForms !== undefined) {
@@ -1494,7 +1463,6 @@ class PDFPageProxy {
       },
       objs: this.objs,
       commonObjs: this.commonObjs,
-      annotationCanvasMap,
       operatorList: intentState.operatorList,
       pageIndex: this._pageIndex,
       canvasFactory: canvasFactoryInstance,
@@ -1903,94 +1871,83 @@ class PDFPageProxy {
 class LoopbackPort {
   constructor() {
     this._listeners = [];
-    this._deferred = Promise.resolve();
+    this._deferred = Promise.resolve(undefined);
   }
 
   postMessage(obj, transfers) {
-    function cloneValue(object) {
-      if (
-        (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) ||
-        globalThis.structuredClone
-      ) {
-        return globalThis.structuredClone(object, transfers);
-      }
-
+    function cloneValue(value) {
       // Trying to perform a structured clone close to the spec, including
       // transfers.
-      function fallbackCloneValue(value) {
-        if (
-          typeof value === "function" ||
-          typeof value === "symbol" ||
-          value instanceof URL
-        ) {
-          throw new Error(
-            `LoopbackPort.postMessage - cannot clone: ${value?.toString()}`
-          );
-        }
+      if (
+        typeof value === "function" ||
+        typeof value === "symbol" ||
+        value instanceof URL
+      ) {
+        throw new Error(
+          `LoopbackPort.postMessage - cannot clone: ${value?.toString()}`
+        );
+      }
 
-        if (typeof value !== "object" || value === null) {
-          return value;
+      if (typeof value !== "object" || value === null) {
+        return value;
+      }
+      if (cloned.has(value)) {
+        // already cloned the object
+        return cloned.get(value);
+      }
+      let buffer, result;
+      if ((buffer = value.buffer) && isArrayBuffer(buffer)) {
+        // We found object with ArrayBuffer (typed array).
+        if (transfers?.includes(buffer)) {
+          result = new value.constructor(
+            buffer,
+            value.byteOffset,
+            value.byteLength
+          );
+        } else {
+          result = new value.constructor(value);
         }
-        if (cloned.has(value)) {
-          // already cloned the object
-          return cloned.get(value);
-        }
-        let buffer, result;
-        if ((buffer = value.buffer) && isArrayBuffer(buffer)) {
-          // We found object with ArrayBuffer (typed array).
-          if (transfers?.includes(buffer)) {
-            result = new value.constructor(
-              buffer,
-              value.byteOffset,
-              value.byteLength
-            );
-          } else {
-            result = new value.constructor(value);
-          }
-          cloned.set(value, result);
-          return result;
-        }
-        if (value instanceof Map) {
-          result = new Map();
-          cloned.set(value, result); // Adding to cache now for cyclic references.
-          for (const [key, val] of value) {
-            result.set(key, fallbackCloneValue(val));
-          }
-          return result;
-        }
-        if (value instanceof Set) {
-          result = new Set();
-          cloned.set(value, result); // Adding to cache now for cyclic references.
-          for (const val of value) {
-            result.add(fallbackCloneValue(val));
-          }
-          return result;
-        }
-        result = Array.isArray(value) ? [] : Object.create(null);
+        cloned.set(value, result);
+        return result;
+      }
+      if (value instanceof Map) {
+        result = new Map();
         cloned.set(value, result); // Adding to cache now for cyclic references.
-        // Cloning all value and object properties, however ignoring properties
-        // defined via getter.
-        for (const i in value) {
-          let desc,
-            p = value;
-          while (!(desc = Object.getOwnPropertyDescriptor(p, i))) {
-            p = Object.getPrototypeOf(p);
-          }
-          if (typeof desc.value === "undefined") {
-            continue;
-          }
-          if (typeof desc.value === "function" && !value.hasOwnProperty?.(i)) {
-            continue;
-          }
-          result[i] = fallbackCloneValue(desc.value);
+        for (const [key, val] of value) {
+          result.set(key, cloneValue(val));
         }
         return result;
       }
-
-      const cloned = new WeakMap();
-      return fallbackCloneValue(object);
+      if (value instanceof Set) {
+        result = new Set();
+        cloned.set(value, result); // Adding to cache now for cyclic references.
+        for (const val of value) {
+          result.add(cloneValue(val));
+        }
+        return result;
+      }
+      result = Array.isArray(value) ? [] : Object.create(null);
+      cloned.set(value, result); // Adding to cache now for cyclic references.
+      // Cloning all value and object properties, however ignoring properties
+      // defined via getter.
+      for (const i in value) {
+        let desc,
+          p = value;
+        while (!(desc = Object.getOwnPropertyDescriptor(p, i))) {
+          p = Object.getPrototypeOf(p);
+        }
+        if (typeof desc.value === "undefined") {
+          continue;
+        }
+        if (typeof desc.value === "function" && !value.hasOwnProperty?.(i)) {
+          continue;
+        }
+        result[i] = cloneValue(desc.value);
+      }
+      return result;
     }
 
+    const cloned = new WeakMap();
     const event = { data: cloneValue(obj) };
 
     this._deferred.then(() => {
@@ -2523,7 +2480,6 @@ class WorkerTransport {
     Promise.all(waitOn).then(() => {
       this.commonObjs.clear();
       this.fontLoader.clear();
-      this._getFieldObjectsPromise = null;
       this._hasJSActionsPromise = null;
 
       if (this._networkStream) {
@@ -2596,14 +2552,16 @@ class WorkerTransport {
         // If stream or range are disabled, it's our only way to report
         // loading progress.
         if (!fullReader.isStreamingSupported || !fullReader.isRangeSupported) {
-          if (this._lastProgress) {
-            loadingTask.onProgress?.(this._lastProgress);
+          if (this._lastProgress && loadingTask.onProgress) {
+            loadingTask.onProgress(this._lastProgress);
           }
           fullReader.onProgress = evt => {
-            loadingTask.onProgress?.({
-              loaded: evt.loaded,
-              total: evt.total,
-            });
+            if (loadingTask.onProgress) {
+              loadingTask.onProgress({
+                loaded: evt.loaded,
+                total: evt.total,
+              });
+            }
           };
         }
 
@@ -2729,11 +2687,12 @@ class WorkerTransport {
     messageHandler.on("DataLoaded", data => {
       // For consistency: Ensure that progress is always reported when the
       // entire PDF file has been loaded, regardless of how it was fetched.
-      loadingTask.onProgress?.({
-        loaded: data.length,
-        total: data.length,
-      });
-
+      if (loadingTask.onProgress) {
+        loadingTask.onProgress({
+          loaded: data.length,
+          total: data.length,
+        });
+      }
       this.downloadInfoCapability.resolve(data);
     });
 
@@ -2812,13 +2771,13 @@ class WorkerTransport {
     messageHandler.on("obj", data => {
       if (this.destroyed) {
         // Ignore any pending requests if the worker was terminated.
-        return;
+        return undefined;
       }
 
       const [id, pageIndex, type, imageData] = data;
       const pageProxy = this.pageCache[pageIndex];
       if (pageProxy.objs.has(id)) {
-        return;
+        return undefined;
       }
 
       switch (type) {
@@ -2837,16 +2796,20 @@ class WorkerTransport {
         default:
           throw new Error(`Got unknown object type ${type}`);
       }
+      return undefined;
     });
 
     messageHandler.on("DocProgress", data => {
       if (this.destroyed) {
         return; // Ignore any pending requests if the worker was terminated.
       }
-      loadingTask.onProgress?.({
-        loaded: data.loaded,
-        total: data.total,
-      });
+
+      if (loadingTask.onProgress) {
+        loadingTask.onProgress({
+          loaded: data.loaded,
+          total: data.total,
+        });
+      }
     });
 
     messageHandler.on(
@@ -2887,7 +2850,9 @@ class WorkerTransport {
     if (this.destroyed) {
       return; // Ignore any pending requests if the worker was terminated.
     }
-    this.loadingTask.onUnsupportedFeature?.(featureId);
+    if (this.loadingTask.onUnsupportedFeature) {
+      this.loadingTask.onUnsupportedFeature(featureId);
+    }
   }
 
   getData() {
@@ -2956,8 +2921,7 @@ class WorkerTransport {
   }
 
   getFieldObjects() {
-    return (this._getFieldObjectsPromise ||=
-      this.messageHandler.sendWithPromise("GetFieldObjects", null));
+    return this.messageHandler.sendWithPromise("GetFieldObjects", null);
   }
 
   hasJSActions() {
@@ -3086,7 +3050,6 @@ class WorkerTransport {
     if (!keepLoadedFonts) {
       this.fontLoader.clear();
     }
-    this._getFieldObjectsPromise = null;
     this._hasJSActionsPromise = null;
   }
 
@@ -3094,7 +3057,6 @@ class WorkerTransport {
     const params = this._params;
     return shadow(this, "loadingParams", {
       disableAutoFetch: params.disableAutoFetch,
-      enableXfa: params.enableXfa,
     });
   }
 }
@@ -3220,7 +3182,6 @@ class InternalRenderTask {
     params,
     objs,
     commonObjs,
-    annotationCanvasMap,
     operatorList,
     pageIndex,
     canvasFactory,
@@ -3231,7 +3192,6 @@ class InternalRenderTask {
     this.params = params;
     this.objs = objs;
     this.commonObjs = commonObjs;
-    this.annotationCanvasMap = annotationCanvasMap;
     this.operatorListIdx = null;
     this.operatorList = operatorList;
     this._pageIndex = pageIndex;
@@ -3290,8 +3250,7 @@ class InternalRenderTask {
       this.objs,
       this.canvasFactory,
       imageLayer,
-      optionalContentConfig,
-      this.annotationCanvasMap
+      optionalContentConfig
     );
     this.gfx.beginDrawing({
       transform,

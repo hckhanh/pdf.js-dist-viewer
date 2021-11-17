@@ -29,6 +29,7 @@ const {
 const { SimpleLinkService } = pdfjsViewer;
 
 const WAITING_TIME = 100; // ms
+const PDF_TO_CSS_UNITS = PixelsPerInch.CSS / PixelsPerInch.PDF;
 const CMAP_URL = "/build/generic/web/cmaps/";
 const CMAP_PACKED = true;
 const STANDARD_FONT_DATA_URL = "/build/generic/web/standard_fonts/";
@@ -101,25 +102,6 @@ function inlineImages(images) {
   return Promise.all(imagePromises);
 }
 
-async function convertCanvasesToImages(annotationCanvasMap) {
-  const results = new Map();
-  const promises = [];
-  for (const [key, canvas] of annotationCanvasMap) {
-    promises.push(
-      new Promise(resolve => {
-        canvas.toBlob(blob => {
-          const image = document.createElement("img");
-          image.onload = resolve;
-          results.set(key, image);
-          image.src = URL.createObjectURL(blob);
-        });
-      })
-    );
-  }
-  await Promise.all(promises);
-  return results;
-}
-
 async function resolveImages(node, silentErrors = false) {
   const images = node.getElementsByTagName("img");
   const data = await inlineImages(images);
@@ -187,7 +169,7 @@ var rasterizeTextLayer = (function rasterizeTextLayerClosure() {
       foreignObject.appendChild(div);
 
       stylePromise
-        .then(async ([cssRules]) => {
+        .then(async cssRules => {
           style.textContent = cssRules;
 
           // Rendering text layer as HTML.
@@ -246,7 +228,6 @@ var rasterizeAnnotationLayer = (function rasterizeAnnotationLayerClosure() {
     ctx,
     viewport,
     annotations,
-    annotationCanvasMap,
     page,
     imageResourcesPath,
     renderForms = false
@@ -271,14 +252,10 @@ var rasterizeAnnotationLayer = (function rasterizeAnnotationLayerClosure() {
 
       // Rendering annotation layer as HTML.
       stylePromise
-        .then(async ([common, overrides]) => {
-          style.textContent = common + "\n" + overrides;
+        .then(async (common, overrides) => {
+          style.textContent = common + overrides;
 
           var annotation_viewport = viewport.clone({ dontFlip: true });
-          const annotationImageMap = await convertCanvasesToImages(
-            annotationCanvasMap
-          );
-
           var parameters = {
             viewport: annotation_viewport,
             div,
@@ -287,7 +264,6 @@ var rasterizeAnnotationLayer = (function rasterizeAnnotationLayerClosure() {
             linkService: new SimpleLinkService(),
             imageResourcesPath,
             renderForms,
-            annotationCanvasMap: annotationImageMap,
           };
           AnnotationLayer.render(parameters);
 
@@ -314,10 +290,6 @@ var rasterizeXfaLayer = (function rasterizeXfaLayerClosure() {
   const styles = {
     common: {
       file: "../web/xfa_layer_builder.css",
-      promise: null,
-    },
-    overrides: {
-      file: "./xfa_layer_builder_overrides.css",
       promise: null,
     },
   };
@@ -355,15 +327,14 @@ var rasterizeXfaLayer = (function rasterizeXfaLayerClosure() {
       foreignObject.appendChild(div);
 
       stylePromise
-        .then(async ([common, overrides]) => {
-          style.textContent = fontRules + "\n" + common + "\n" + overrides;
+        .then(async cssRules => {
+          style.textContent = fontRules + "\n" + cssRules;
 
           XfaLayer.render({
             xfa,
             div,
             viewport: viewport.clone({ dontFlip: true }),
             annotationStorage,
-            linkService: new SimpleLinkService(),
             intent: isPrint ? "print" : "display",
           });
 
@@ -430,8 +401,14 @@ var Driver = (function DriverClosure() {
 
   Driver.prototype = {
     _getQueryStringParameters: function Driver_getQueryStringParameters() {
-      const queryString = window.location.search.substring(1);
-      return Object.fromEntries(new URLSearchParams(queryString).entries());
+      var queryString = window.location.search.substring(1);
+      var values = queryString.split("&");
+      var parameters = {};
+      for (var i = 0, ii = values.length; i < ii; i++) {
+        var value = values[i].split("=");
+        parameters[unescape(value[0])] = unescape(value[1]);
+      }
+      return parameters;
     },
 
     run: function Driver_run() {
@@ -679,9 +656,7 @@ var Driver = (function DriverClosure() {
           ctx = this.canvas.getContext("2d", { alpha: false });
           task.pdfDoc.getPage(task.pageNum).then(
             function (page) {
-              var viewport = page.getViewport({
-                scale: PixelsPerInch.PDF_TO_CSS_UNITS,
-              });
+              var viewport = page.getViewport({ scale: PDF_TO_CSS_UNITS });
               self.canvas.width = viewport.width;
               self.canvas.height = viewport.height;
               self._clearCanvas();
@@ -690,8 +665,7 @@ var Driver = (function DriverClosure() {
               var renderAnnotations = false,
                 renderForms = false,
                 renderPrint = false,
-                renderXfa = false,
-                annotationCanvasMap = null;
+                renderXfa = false;
 
               if (task.annotationStorage) {
                 const entries = Object.entries(task.annotationStorage),
@@ -765,8 +739,18 @@ var Driver = (function DriverClosure() {
                   if (!renderXfa) {
                     // The annotation builder will draw its content
                     // on the canvas.
-                    initPromise = page.getAnnotations({ intent: "display" });
-                    annotationCanvasMap = new Map();
+                    initPromise = page
+                      .getAnnotations({ intent: "display" })
+                      .then(function (annotations) {
+                        return rasterizeAnnotationLayer(
+                          annotationLayerContext,
+                          viewport,
+                          annotations,
+                          page,
+                          IMAGE_RESOURCES_PATH,
+                          renderForms
+                        );
+                      });
                   } else {
                     initPromise = page.getXfa().then(function (xfa) {
                       return rasterizeXfaLayer(
@@ -784,11 +768,11 @@ var Driver = (function DriverClosure() {
                   initPromise = Promise.resolve();
                 }
               }
+
               var renderContext = {
                 canvasContext: ctx,
                 viewport,
                 optionalContentConfigPromise: task.optionalContentConfigPromise,
-                annotationCanvasMap,
               };
               if (renderForms) {
                 renderContext.annotationMode = AnnotationMode.ENABLE_FORMS;
@@ -821,7 +805,7 @@ var Driver = (function DriverClosure() {
                 self._snapshot(task, error);
               };
               initPromise
-                .then(function (data) {
+                .then(function () {
                   const renderTask = page.render(renderContext);
 
                   if (task.renderTaskOnContinue) {
@@ -831,21 +815,7 @@ var Driver = (function DriverClosure() {
                     };
                   }
                   return renderTask.promise.then(function () {
-                    if (annotationCanvasMap) {
-                      rasterizeAnnotationLayer(
-                        annotationLayerContext,
-                        viewport,
-                        data,
-                        annotationCanvasMap,
-                        page,
-                        IMAGE_RESOURCES_PATH,
-                        renderForms
-                      ).then(() => {
-                        completeRender(false);
-                      });
-                    } else {
-                      completeRender(false);
-                    }
+                    completeRender(false);
                   });
                 })
                 .catch(function (error) {

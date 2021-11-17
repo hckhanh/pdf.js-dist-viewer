@@ -99,21 +99,26 @@ class PDFThumbnailViewer {
       // ... and add the highlight to the new thumbnail.
       thumbnailView.div.classList.add(THUMBNAIL_SELECTED_CLASS);
     }
-    const { first, last, views } = this._getVisibleThumbs();
+    const visibleThumbs = this._getVisibleThumbs();
+    const numVisibleThumbs = visibleThumbs.views.length;
 
     // If the thumbnail isn't currently visible, scroll it into view.
-    if (views.length > 0) {
+    if (numVisibleThumbs > 0) {
+      const first = visibleThumbs.first.id;
+      // Account for only one thumbnail being visible.
+      const last = numVisibleThumbs > 1 ? visibleThumbs.last.id : first;
+
       let shouldScroll = false;
-      if (pageNumber <= first.id || pageNumber >= last.id) {
+      if (pageNumber <= first || pageNumber >= last) {
         shouldScroll = true;
       } else {
-        for (const { id, percent } of views) {
-          if (id !== pageNumber) {
-            continue;
+        visibleThumbs.views.some(function (view) {
+          if (view.id !== pageNumber) {
+            return false;
           }
-          shouldScroll = percent < 100;
-          break;
-        }
+          shouldScroll = view.percent < 100;
+          return true;
+        });
       }
       if (shouldScroll) {
         scrollIntoView(thumbnailView.div, { top: THUMBNAIL_SCROLL_MARGIN });
@@ -290,22 +295,12 @@ class PDFThumbnailViewer {
     return promise;
   }
 
-  #getScrollAhead(visible) {
-    if (visible.first?.id === 1) {
-      return true;
-    } else if (visible.last?.id === this._thumbnails.length) {
-      return false;
-    }
-    return this.scroll.down;
-  }
-
   forceRendering() {
     const visibleThumbs = this._getVisibleThumbs();
-    const scrollAhead = this.#getScrollAhead(visibleThumbs);
     const thumbView = this.renderingQueue.getHighestPriority(
       visibleThumbs,
       this._thumbnails,
-      scrollAhead
+      this.scroll.down
     );
     if (thumbView) {
       this._ensurePdfPageLoaded(thumbView).then(() => {

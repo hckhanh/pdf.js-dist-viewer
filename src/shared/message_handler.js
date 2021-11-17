@@ -122,7 +122,6 @@ class MessageHandler {
       if (data.callbackId) {
         const cbSourceName = this.sourceName;
         const cbTargetName = data.sourceName;
-
         new Promise(function (resolve) {
           resolve(action(data.data));
         }).then(
@@ -231,10 +230,10 @@ class MessageHandler {
    * @returns {ReadableStream} ReadableStream to read data in chunks.
    */
   sendWithStream(actionName, data, queueingStrategy, transfers) {
-    const streamId = this.streamId++,
-      sourceName = this.sourceName,
-      targetName = this.targetName,
-      comObj = this.comObj;
+    const streamId = this.streamId++;
+    const sourceName = this.sourceName;
+    const targetName = this.targetName;
+    const comObj = this.comObj;
 
     return new ReadableStream(
       {
@@ -301,12 +300,12 @@ class MessageHandler {
    * @private
    */
   _createStreamSink(data) {
-    const streamId = data.streamId,
-      sourceName = this.sourceName,
-      targetName = data.sourceName,
-      comObj = this.comObj;
-    const self = this,
-      action = this.actionHandler[data.action];
+    const self = this;
+    const action = this.actionHandler[data.action];
+    const streamId = data.streamId;
+    const sourceName = this.sourceName;
+    const targetName = data.sourceName;
+    const comObj = this.comObj;
 
     const streamSink = {
       enqueue(chunk, size = 1, transfers) {
@@ -374,7 +373,6 @@ class MessageHandler {
     streamSink.sinkCapability.resolve();
     streamSink.ready = streamSink.sinkCapability.promise;
     this.streamSinks[streamId] = streamSink;
-
     new Promise(function (resolve) {
       resolve(action(data.data, streamSink));
     }).then(
@@ -403,31 +401,33 @@ class MessageHandler {
    * @private
    */
   _processStreamMessage(data) {
-    const streamId = data.streamId,
-      sourceName = this.sourceName,
-      targetName = data.sourceName,
-      comObj = this.comObj;
-    const streamController = this.streamControllers[streamId],
-      streamSink = this.streamSinks[streamId];
+    const streamId = data.streamId;
+    const sourceName = this.sourceName;
+    const targetName = data.sourceName;
+    const comObj = this.comObj;
 
     switch (data.stream) {
       case StreamKind.START_COMPLETE:
         if (data.success) {
-          streamController.startCall.resolve();
+          this.streamControllers[streamId].startCall.resolve();
         } else {
-          streamController.startCall.reject(wrapReason(data.reason));
+          this.streamControllers[streamId].startCall.reject(
+            wrapReason(data.reason)
+          );
         }
         break;
       case StreamKind.PULL_COMPLETE:
         if (data.success) {
-          streamController.pullCall.resolve();
+          this.streamControllers[streamId].pullCall.resolve();
         } else {
-          streamController.pullCall.reject(wrapReason(data.reason));
+          this.streamControllers[streamId].pullCall.reject(
+            wrapReason(data.reason)
+          );
         }
         break;
       case StreamKind.PULL:
         // Ignore any pull after close is called.
-        if (!streamSink) {
+        if (!this.streamSinks[streamId]) {
           comObj.postMessage({
             sourceName,
             targetName,
@@ -437,16 +437,20 @@ class MessageHandler {
           });
           break;
         }
-        // Pull increases the desiredSize property of sink, so when it changes
-        // from negative to positive, set ready property as resolved promise.
-        if (streamSink.desiredSize <= 0 && data.desiredSize > 0) {
-          streamSink.sinkCapability.resolve();
+        // Pull increases the desiredSize property of sink,
+        // so when it changes from negative to positive,
+        // set ready property as resolved promise.
+        if (
+          this.streamSinks[streamId].desiredSize <= 0 &&
+          data.desiredSize > 0
+        ) {
+          this.streamSinks[streamId].sinkCapability.resolve();
         }
         // Reset desiredSize property of sink on every pull.
-        streamSink.desiredSize = data.desiredSize;
-
+        this.streamSinks[streamId].desiredSize = data.desiredSize;
+        const { onPull } = this.streamSinks[streamId];
         new Promise(function (resolve) {
-          resolve(streamSink.onPull && streamSink.onPull());
+          resolve(onPull && onPull());
         }).then(
           function () {
             comObj.postMessage({
@@ -469,43 +473,54 @@ class MessageHandler {
         );
         break;
       case StreamKind.ENQUEUE:
-        assert(streamController, "enqueue should have stream controller");
-        if (streamController.isClosed) {
+        assert(
+          this.streamControllers[streamId],
+          "enqueue should have stream controller"
+        );
+        if (this.streamControllers[streamId].isClosed) {
           break;
         }
-        streamController.controller.enqueue(data.chunk);
+        this.streamControllers[streamId].controller.enqueue(data.chunk);
         break;
       case StreamKind.CLOSE:
-        assert(streamController, "close should have stream controller");
-        if (streamController.isClosed) {
+        assert(
+          this.streamControllers[streamId],
+          "close should have stream controller"
+        );
+        if (this.streamControllers[streamId].isClosed) {
           break;
         }
-        streamController.isClosed = true;
-        streamController.controller.close();
-        this._deleteStreamController(streamController, streamId);
+        this.streamControllers[streamId].isClosed = true;
+        this.streamControllers[streamId].controller.close();
+        this._deleteStreamController(streamId);
         break;
       case StreamKind.ERROR:
-        assert(streamController, "error should have stream controller");
-        streamController.controller.error(wrapReason(data.reason));
-        this._deleteStreamController(streamController, streamId);
+        assert(
+          this.streamControllers[streamId],
+          "error should have stream controller"
+        );
+        this.streamControllers[streamId].controller.error(
+          wrapReason(data.reason)
+        );
+        this._deleteStreamController(streamId);
         break;
       case StreamKind.CANCEL_COMPLETE:
         if (data.success) {
-          streamController.cancelCall.resolve();
+          this.streamControllers[streamId].cancelCall.resolve();
         } else {
-          streamController.cancelCall.reject(wrapReason(data.reason));
+          this.streamControllers[streamId].cancelCall.reject(
+            wrapReason(data.reason)
+          );
         }
-        this._deleteStreamController(streamController, streamId);
+        this._deleteStreamController(streamId);
         break;
       case StreamKind.CANCEL:
-        if (!streamSink) {
+        if (!this.streamSinks[streamId]) {
           break;
         }
-
+        const { onCancel } = this.streamSinks[streamId];
         new Promise(function (resolve) {
-          resolve(
-            streamSink.onCancel && streamSink.onCancel(wrapReason(data.reason))
-          );
+          resolve(onCancel && onCancel(wrapReason(data.reason)));
         }).then(
           function () {
             comObj.postMessage({
@@ -526,8 +541,10 @@ class MessageHandler {
             });
           }
         );
-        streamSink.sinkCapability.reject(wrapReason(data.reason));
-        streamSink.isCancelled = true;
+        this.streamSinks[streamId].sinkCapability.reject(
+          wrapReason(data.reason)
+        );
+        this.streamSinks[streamId].isCancelled = true;
         delete this.streamSinks[streamId];
         break;
       default:
@@ -538,14 +555,18 @@ class MessageHandler {
   /**
    * @private
    */
-  async _deleteStreamController(streamController, streamId) {
+  async _deleteStreamController(streamId) {
     // Delete the `streamController` only when the start, pull, and cancel
     // capabilities have settled, to prevent `TypeError`s.
-    await Promise.allSettled([
-      streamController.startCall && streamController.startCall.promise,
-      streamController.pullCall && streamController.pullCall.promise,
-      streamController.cancelCall && streamController.cancelCall.promise,
-    ]);
+    await Promise.allSettled(
+      [
+        this.streamControllers[streamId].startCall,
+        this.streamControllers[streamId].pullCall,
+        this.streamControllers[streamId].cancelCall,
+      ].map(function (capability) {
+        return capability && capability.promise;
+      })
+    );
     delete this.streamControllers[streamId];
   }
 

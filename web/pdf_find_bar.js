@@ -89,7 +89,7 @@ class PDFFindBar {
     this.updateUIState();
   }
 
-  dispatchEvent(type, findPrev = false) {
+  dispatchEvent(type, findPrev) {
     this.eventBus.dispatch("find", {
       source: this,
       type,

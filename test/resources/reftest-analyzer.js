@@ -53,8 +53,11 @@ window.onload = function () {
   function hashParameters() {
     const query = window.location.hash.substring(1);
     const params = new Map();
-    for (const [key, value] of new URLSearchParams(query)) {
-      params.set(key.toLowerCase(), value);
+    for (const part of query.split(/[&;]/)) {
+      const param = part.split("="),
+        key = param[0].toLowerCase(),
+        value = param.length > 1 ? param[1] : "";
+      params.set(decodeURIComponent(key), decodeURIComponent(value));
     }
     return params;
   }

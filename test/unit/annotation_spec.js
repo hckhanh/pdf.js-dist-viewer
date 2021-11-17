@@ -26,7 +26,6 @@ import {
   AnnotationFlag,
   AnnotationType,
   OPS,
-  RenderingIntentFlag,
   stringToBytes,
   stringToUTF8String,
 } from "../../src/shared/util.js";
@@ -313,14 +312,14 @@ describe("annotation", function () {
       const annotation = new Annotation({ dict, ref });
       annotation.setContents("Foo bar baz");
 
-      expect(annotation._contents).toEqual({ str: "Foo bar baz", dir: "ltr" });
+      expect(annotation.contents).toEqual("Foo bar baz");
     });
 
     it("should not set and get invalid contents", function () {
       const annotation = new Annotation({ dict, ref });
       annotation.setContents(undefined);
 
-      expect(annotation._contents).toEqual({ str: "", dir: "ltr" });
+      expect(annotation.contents).toEqual("");
     });
 
     it("should set and get a valid modification date", function () {
@@ -611,8 +610,8 @@ describe("annotation", function () {
       );
       expect(data.inReplyTo).toEqual(annotationRef.toString());
       expect(data.replyType).toEqual("Group");
-      expect(data.titleObj).toEqual({ str: "ParentTitle", dir: "ltr" });
-      expect(data.contentsObj).toEqual({ str: "ParentText", dir: "ltr" });
+      expect(data.title).toEqual("ParentTitle");
+      expect(data.contents).toEqual("ParentText");
       expect(data.creationDate).toEqual("D:20180423");
       expect(data.modificationDate).toEqual("D:20190423");
       expect(data.color).toEqual(new Uint8ClampedArray([0, 0, 255]));
@@ -666,8 +665,8 @@ describe("annotation", function () {
       );
       expect(data.inReplyTo).toEqual(annotationRef.toString());
       expect(data.replyType).toEqual("R");
-      expect(data.titleObj).toEqual({ str: "ReplyTitle", dir: "ltr" });
-      expect(data.contentsObj).toEqual({ str: "ReplyText", dir: "ltr" });
+      expect(data.title).toEqual("ReplyTitle");
+      expect(data.contents).toEqual("ReplyText");
       expect(data.creationDate).toEqual("D:20180523");
       expect(data.modificationDate).toEqual("D:20190523");
       expect(data.color).toEqual(new Uint8ClampedArray([102, 102, 102]));
@@ -797,7 +796,7 @@ describe("annotation", function () {
         );
         expect(data.annotationType).toEqual(AnnotationType.LINK);
         expect(data.url).toEqual("http://www.hmrc.gov.uk/");
-        expect(data.unsafeUrl).toEqual("www.hmrc.gov.uk");
+        expect(data.unsafeUrl).toEqual("http://www.hmrc.gov.uk");
         expect(data.dest).toBeUndefined();
       }
     );
@@ -844,7 +843,7 @@ describe("annotation", function () {
           ).href
         );
         expect(data.unsafeUrl).toEqual(
-          "http://www.example.com/\xC3\xBC\xC3\xB6\xC3\xA4"
+          stringToUTF8String("http://www.example.com/\xC3\xBC\xC3\xB6\xC3\xA4")
         );
         expect(data.dest).toBeUndefined();
       }
@@ -1109,7 +1108,7 @@ describe("annotation", function () {
           jsEntry: "window.open('http://www.example.com/test.pdf')",
           expectedUrl: new URL("http://www.example.com/test.pdf").href,
           expectedUnsafeUrl: "http://www.example.com/test.pdf",
-          expectedNewWindow: false,
+          expectedNewWindow: undefined,
         });
 
         // Check that we accept a white-listed {Stream} 'JS' entry.
@@ -1681,7 +1680,6 @@ describe("annotation", function () {
       const operatorList = await annotation.getOperatorList(
         partialEvaluator,
         task,
-        RenderingIntentFlag.PRINT,
         false,
         annotationStorage
       );
@@ -1696,7 +1694,6 @@ describe("annotation", function () {
         [0, 0, 32, 10],
         [32, 0, 0, 10, 0, 0],
         [1, 0, 0, 1, 0, 0],
-        false,
       ]);
       expect(operatorList.argsArray[1]).toEqual(
         new Uint8ClampedArray([26, 51, 76])
@@ -2322,7 +2319,6 @@ describe("annotation", function () {
       const operatorList = await annotation.getOperatorList(
         checkboxEvaluator,
         task,
-        RenderingIntentFlag.PRINT,
         false,
         annotationStorage
       );
@@ -2339,7 +2335,6 @@ describe("annotation", function () {
         [0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0],
         [1, 0, 0, 1, 0, 0],
-        false,
       ]);
       expect(operatorList.argsArray[3][0][0].unicode).toEqual("4");
     });
@@ -2383,7 +2378,6 @@ describe("annotation", function () {
       let operatorList = await annotation.getOperatorList(
         partialEvaluator,
         task,
-        RenderingIntentFlag.PRINT,
         false,
         annotationStorage
       );
@@ -2398,7 +2392,6 @@ describe("annotation", function () {
         [0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0],
         [1, 0, 0, 1, 0, 0],
-        false,
       ]);
       expect(operatorList.argsArray[1]).toEqual(
         new Uint8ClampedArray([26, 51, 76])
@@ -2409,7 +2402,6 @@ describe("annotation", function () {
       operatorList = await annotation.getOperatorList(
         partialEvaluator,
         task,
-        RenderingIntentFlag.PRINT,
         false,
         annotationStorage
       );
@@ -2424,7 +2416,6 @@ describe("annotation", function () {
         [0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0],
         [1, 0, 0, 1, 0, 0],
-        false,
       ]);
       expect(operatorList.argsArray[1]).toEqual(
         new Uint8ClampedArray([76, 51, 26])
@@ -2473,7 +2464,6 @@ describe("annotation", function () {
         const operatorList = await annotation.getOperatorList(
           partialEvaluator,
           task,
-          RenderingIntentFlag.PRINT,
           false,
           annotationStorage
         );
@@ -2488,7 +2478,6 @@ describe("annotation", function () {
           [0, 0, 0, 0],
           [0, 0, 0, 0, 0, 0],
           [1, 0, 0, 1, 0, 0],
-          false,
         ]);
         expect(operatorList.argsArray[1]).toEqual(
           new Uint8ClampedArray([26, 51, 76])
@@ -2535,7 +2524,6 @@ describe("annotation", function () {
       const operatorList = await annotation.getOperatorList(
         partialEvaluator,
         task,
-        RenderingIntentFlag.PRINT,
         false,
         annotationStorage
       );
@@ -2550,7 +2538,6 @@ describe("annotation", function () {
         [0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0],
         [1, 0, 0, 1, 0, 0],
-        false,
       ]);
       expect(operatorList.argsArray[1]).toEqual(
         new Uint8ClampedArray([26, 51, 76])
@@ -2740,7 +2727,6 @@ describe("annotation", function () {
       let operatorList = await annotation.getOperatorList(
         partialEvaluator,
         task,
-        RenderingIntentFlag.PRINT,
         false,
         annotationStorage
       );
@@ -2755,7 +2741,6 @@ describe("annotation", function () {
         [0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0],
         [1, 0, 0, 1, 0, 0],
-        false,
       ]);
       expect(operatorList.argsArray[1]).toEqual(
         new Uint8ClampedArray([26, 51, 76])
@@ -2766,7 +2751,6 @@ describe("annotation", function () {
       operatorList = await annotation.getOperatorList(
         partialEvaluator,
         task,
-        RenderingIntentFlag.PRINT,
         false,
         annotationStorage
       );
@@ -2781,7 +2765,6 @@ describe("annotation", function () {
         [0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0],
         [1, 0, 0, 1, 0, 0],
-        false,
       ]);
       expect(operatorList.argsArray[1]).toEqual(
         new Uint8ClampedArray([76, 51, 26])
@@ -2828,7 +2811,6 @@ describe("annotation", function () {
       const operatorList = await annotation.getOperatorList(
         partialEvaluator,
         task,
-        RenderingIntentFlag.PRINT,
         false,
         annotationStorage
       );
@@ -2843,7 +2825,6 @@ describe("annotation", function () {
         [0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0],
         [1, 0, 0, 1, 0, 0],
-        false,
       ]);
       expect(operatorList.argsArray[1]).toEqual(
         new Uint8ClampedArray([76, 51, 26])
@@ -3640,8 +3621,8 @@ describe("annotation", function () {
           pdfManagerMock,
           idFactoryMock
         );
-        expect(data.titleObj).toEqual({ str: "Correct Title", dir: "ltr" });
-        expect(data.contentsObj).toEqual({ str: "Correct Text", dir: "ltr" });
+        expect(data.title).toEqual("Correct Title");
+        expect(data.contents).toEqual("Correct Text");
         expect(data.modificationDate).toEqual("D:20190423");
         expect(data.color).toEqual(new Uint8ClampedArray([0, 0, 255]));
       }

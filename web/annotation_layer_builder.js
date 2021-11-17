@@ -33,10 +33,7 @@ import { SimpleLinkService } from "./pdf_link_service.js";
  * @property {IL10n} l10n - Localization service.
  * @property {boolean} [enableScripting]
  * @property {Promise<boolean>} [hasJSActionsPromise]
- * @property {Promise<Object<string, Array<Object>> | null>}
- *   [fieldObjectsPromise]
  * @property {Object} [mouseState]
- * @property {Map<string, Canvas>} [annotationCanvasMap]
  */
 
 class AnnotationLayerBuilder {
@@ -54,9 +51,7 @@ class AnnotationLayerBuilder {
     l10n = NullL10n,
     enableScripting = false,
     hasJSActionsPromise = null,
-    fieldObjectsPromise = null,
     mouseState = null,
-    annotationCanvasMap = null,
   }) {
     this.pageDiv = pageDiv;
     this.pdfPage = pdfPage;
@@ -68,9 +63,7 @@ class AnnotationLayerBuilder {
     this.annotationStorage = annotationStorage;
     this.enableScripting = enableScripting;
     this._hasJSActionsPromise = hasJSActionsPromise;
-    this._fieldObjectsPromise = fieldObjectsPromise;
     this._mouseState = mouseState;
-    this._annotationCanvasMap = annotationCanvasMap;
 
     this.div = null;
     this._cancelled = false;
@@ -82,50 +75,46 @@ class AnnotationLayerBuilder {
    * @returns {Promise<void>} A promise that is resolved when rendering of the
    *   annotations is complete.
    */
-  async render(viewport, intent = "display") {
-    const [annotations, hasJSActions = false, fieldObjects = null] =
-      await Promise.all([
-        this.pdfPage.getAnnotations({ intent }),
-        this._hasJSActionsPromise,
-        this._fieldObjectsPromise,
-      ]);
+  render(viewport, intent = "display") {
+    return Promise.all([
+      this.pdfPage.getAnnotations({ intent }),
+      this._hasJSActionsPromise,
+    ]).then(([annotations, hasJSActions = false]) => {
+      if (this._cancelled || annotations.length === 0) {
+        return;
+      }
 
-    if (this._cancelled || annotations.length === 0) {
-      return;
-    }
+      const parameters = {
+        viewport: viewport.clone({ dontFlip: true }),
+        div: this.div,
+        annotations,
+        page: this.pdfPage,
+        imageResourcesPath: this.imageResourcesPath,
+        renderForms: this.renderForms,
+        linkService: this.linkService,
+        downloadManager: this.downloadManager,
+        annotationStorage: this.annotationStorage,
+        enableScripting: this.enableScripting,
+        hasJSActions,
+        mouseState: this._mouseState,
+      };
 
-    const parameters = {
-      viewport: viewport.clone({ dontFlip: true }),
-      div: this.div,
-      annotations,
-      page: this.pdfPage,
-      imageResourcesPath: this.imageResourcesPath,
-      renderForms: this.renderForms,
-      linkService: this.linkService,
-      downloadManager: this.downloadManager,
-      annotationStorage: this.annotationStorage,
-      enableScripting: this.enableScripting,
-      hasJSActions,
-      fieldObjects,
-      mouseState: this._mouseState,
-      annotationCanvasMap: this._annotationCanvasMap,
-    };
+      if (this.div) {
+        // If an annotationLayer already exists, refresh its children's
+        // transformation matrices.
+        AnnotationLayer.update(parameters);
+      } else {
+        // Create an annotation layer div and render the annotations
+        // if there is at least one annotation.
+        this.div = document.createElement("div");
+        this.div.className = "annotationLayer";
+        this.pageDiv.appendChild(this.div);
+        parameters.div = this.div;
 
-    if (this.div) {
-      // If an annotationLayer already exists, refresh its children's
-      // transformation matrices.
-      AnnotationLayer.update(parameters);
-    } else {
-      // Create an annotation layer div and render the annotations
-      // if there is at least one annotation.
-      this.div = document.createElement("div");
-      this.div.className = "annotationLayer";
-      this.pageDiv.appendChild(this.div);
-      parameters.div = this.div;
-
-      AnnotationLayer.render(parameters);
-      this.l10n.translate(this.div);
-    }
+        AnnotationLayer.render(parameters);
+        this.l10n.translate(this.div);
+      }
+    });
   }
 
   cancel() {
@@ -155,10 +144,6 @@ class DefaultAnnotationLayerFactory {
    * @param {boolean} [enableScripting]
    * @param {Promise<boolean>} [hasJSActionsPromise]
    * @param {Object} [mouseState]
-   * @param {Promise<Object<string, Array<Object>> | null>}
-   *   [fieldObjectsPromise]
-   * @param {Map<string, Canvas> | null} [annotationCanvasMap] - Map some
-   *  annotation ids with canvases used to render them.
    * @returns {AnnotationLayerBuilder}
    */
   createAnnotationLayerBuilder(
@@ -170,9 +155,7 @@ class DefaultAnnotationLayerFactory {
     l10n = NullL10n,
     enableScripting = false,
     hasJSActionsPromise = null,
-    mouseState = null,
-    fieldObjectsPromise = null,
-    annotationCanvasMap = null
+    mouseState = null
   ) {
     return new AnnotationLayerBuilder({
       pageDiv,
@@ -184,9 +167,7 @@ class DefaultAnnotationLayerFactory {
       annotationStorage,
       enableScripting,
       hasJSActionsPromise,
-      fieldObjectsPromise,
       mouseState,
-      annotationCanvasMap,
     });
   }
 }

@@ -1,14 +1,14 @@
 "use strict";
 
 const acorn = require("acorn");
-const escodegen = require("@javascript-obfuscator/escodegen");
+const escodegen = require("escodegen");
 const vm = require("vm");
 const fs = require("fs");
 const path = require("path");
 
 const PDFJS_PREPROCESSOR_NAME = "PDFJSDev";
 const ROOT_PREFIX = "$ROOT/";
-const ACORN_ECMA_VERSION = 2022;
+const ACORN_ECMA_VERSION = 2021;
 
 function isLiteral(obj, value) {
   return obj.type === "Literal" && obj.value === value;

@@ -219,8 +219,6 @@ class MozL10n {
     "findentirewordchange",
     "findbarclose",
   ];
-  const findLen = "find".length;
-
   const handleEvent = function ({ type, detail }) {
     if (!PDFViewerApplication.initialized) {
       return;
@@ -231,7 +229,7 @@ class MozL10n {
     }
     PDFViewerApplication.eventBus.dispatch("find", {
       source: window,
-      type: type.substring(findLen),
+      type: type.substring("find".length),
       query: detail.query,
       phraseSearch: true,
       caseSensitive: !!detail.caseSensitive,
@@ -332,10 +330,6 @@ class FirefoxExternalServices extends DefaultExternalServices {
       }
       switch (args.pdfjsLoadAction) {
         case "supportsRangedLoading":
-          if (args.done && !args.data) {
-            callbacks.onError();
-            break;
-          }
           pdfDataRangeTransport = new FirefoxComDataRangeTransport(
             args.length,
             args.data,
@@ -363,7 +357,9 @@ class FirefoxExternalServices extends DefaultExternalServices {
           pdfDataRangeTransport.onDataProgress(args.loaded, args.total);
           break;
         case "progressiveDone":
-          pdfDataRangeTransport?.onDataProgressiveDone();
+          if (pdfDataRangeTransport) {
+            pdfDataRangeTransport.onDataProgressiveDone();
+          }
           break;
         case "progress":
           callbacks.onProgress(args.loaded, args.total);

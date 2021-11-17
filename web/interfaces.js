@@ -64,13 +64,6 @@ class IPDFLinkService {
   goToPage(val) {}
 
   /**
-   * @param {HTMLAnchorElement} link
-   * @param {string} url
-   * @param {boolean} [newWindow]
-   */
-  addLinkAttributes(link, url, newWindow = false) {}
-
-  /**
    * @param dest - The PDF destination object.
    * @returns {string} The hyperlink to the PDF object.
    */
@@ -173,10 +166,6 @@ class IPDFAnnotationLayerFactory {
    * @param {boolean} [enableScripting]
    * @param {Promise<boolean>} [hasJSActionsPromise]
    * @param {Object} [mouseState]
-   * @param {Promise<Object<string, Array<Object>> | null>}
-   *   [fieldObjectsPromise]
-   * @property {Map<string, Canvas> | null} [annotationCanvasMap] - Map some
-   *  annotation ids with canvases used to render them.
    * @returns {AnnotationLayerBuilder}
    */
   createAnnotationLayerBuilder(
@@ -188,9 +177,7 @@ class IPDFAnnotationLayerFactory {
     l10n = undefined,
     enableScripting = false,
     hasJSActionsPromise = null,
-    mouseState = null,
-    fieldObjectsPromise = null,
-    annotationCanvasMap = null
+    mouseState = null
   ) {}
 }
 
@@ -201,16 +188,9 @@ class IPDFXfaLayerFactory {
   /**
    * @param {HTMLDivElement} pageDiv
    * @param {PDFPage} pdfPage
-   * @param {AnnotationStorage} [annotationStorage]
-   * @param {Object} [xfaHtml]
    * @returns {XfaLayerBuilder}
    */
-  createXfaLayerBuilder(
-    pageDiv,
-    pdfPage,
-    annotationStorage = null,
-    xfaHtml = null
-  ) {}
+  createXfaLayerBuilder(pageDiv, pdfPage) {}
 }
 
 /**

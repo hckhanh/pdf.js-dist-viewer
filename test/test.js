@@ -921,7 +921,6 @@ async function startBrowser(browserName, startUrl = "") {
       "pdfjs.disabled": true,
       "browser.helperApps.neverAsk.saveToDisk": "application/pdf",
       // Avoid popup when saving is done
-      "browser.download.improvements_to_download_panel": false,
       "browser.download.panel.shown": true,
       // Save file in output
       "browser.download.folderList": 2,

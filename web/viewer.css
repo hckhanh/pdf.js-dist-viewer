@@ -94,7 +94,6 @@
   --secondaryToolbarButton-rotateCw-icon: url(images/secondaryToolbarButton-rotateCw.svg);
   --secondaryToolbarButton-selectTool-icon: url(images/secondaryToolbarButton-selectTool.svg);
   --secondaryToolbarButton-handTool-icon: url(images/secondaryToolbarButton-handTool.svg);
-  --secondaryToolbarButton-scrollPage-icon: url(images/secondaryToolbarButton-scrollPage.svg);
   --secondaryToolbarButton-scrollVertical-icon: url(images/secondaryToolbarButton-scrollVertical.svg);
   --secondaryToolbarButton-scrollHorizontal-icon: url(images/secondaryToolbarButton-scrollHorizontal.svg);
   --secondaryToolbarButton-scrollWrapped-icon: url(images/secondaryToolbarButton-scrollWrapped.svg);
@@ -153,6 +152,7 @@
 
 @media screen and (forced-colors: active) {
   :root {
+    --main-color: ButtonText;
     --button-hover-color: Highlight;
     --doorhanger-hover-bg-color: Highlight;
     --toolbar-icon-opacity: 1;
@@ -1197,11 +1197,6 @@ html[dir="rtl"] .secondaryToolbarButton > span {
   mask-image: var(--secondaryToolbarButton-handTool-icon);
 }
 
-.secondaryToolbarButton.scrollPage::before {
-  -webkit-mask-image: var(--secondaryToolbarButton-scrollPage-icon);
-  mask-image: var(--secondaryToolbarButton-scrollPage-icon);
-}
-
 .secondaryToolbarButton.scrollVertical::before {
   -webkit-mask-image: var(--secondaryToolbarButton-scrollVertical-icon);
   mask-image: var(--secondaryToolbarButton-scrollVertical-icon);
@@ -1707,7 +1702,6 @@ html[dir="rtl"] #documentPropertiesOverlay .row > * {
 }
 #PDFBug table {
   font-size: 10px;
-  white-space: pre;
 }
 #PDFBug table.showText {
   border-collapse: collapse;

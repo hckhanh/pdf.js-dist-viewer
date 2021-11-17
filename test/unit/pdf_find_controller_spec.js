@@ -69,27 +69,14 @@ async function initPdfFindController(filename) {
 function testSearch({
   eventBus,
   pdfFindController,
-  state,
+  parameters,
   matchesPerPage,
   selectedMatch,
   pageMatches = null,
   pageMatchesLength = null,
 }) {
   return new Promise(function (resolve) {
-    const eventState = Object.assign(
-      Object.create(null),
-      {
-        source: this,
-        type: "",
-        query: null,
-        caseSensitive: false,
-        entireWord: false,
-        phraseSearch: true,
-        findPrevious: false,
-      },
-      state
-    );
-    eventBus.dispatch("find", eventState);
+    pdfFindController.executeCommand("find", parameters);
 
     // The `updatefindmatchescount` event is only emitted if the page contains
     // at least one match for the query, so the last non-zero item in the
@@ -155,8 +142,12 @@ describe("pdf_find_controller", function () {
     await testSearch({
       eventBus,
       pdfFindController,
-      state: {
+      parameters: {
         query: "Dynamic",
+        caseSensitive: false,
+        entireWord: false,
+        phraseSearch: true,
+        findPrevious: false,
       },
       matchesPerPage: [11, 5, 0, 3, 0, 0, 0, 1, 1, 1, 0, 3, 4, 4],
       selectedMatch: {
@@ -175,8 +166,11 @@ describe("pdf_find_controller", function () {
     await testSearch({
       eventBus,
       pdfFindController,
-      state: {
+      parameters: {
         query: "conference",
+        caseSensitive: false,
+        entireWord: false,
+        phraseSearch: true,
         findPrevious: true,
       },
       matchesPerPage: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5],
@@ -193,9 +187,12 @@ describe("pdf_find_controller", function () {
     await testSearch({
       eventBus,
       pdfFindController,
-      state: {
+      parameters: {
         query: "Dynamic",
         caseSensitive: true,
+        entireWord: false,
+        phraseSearch: true,
+        findPrevious: false,
       },
       matchesPerPage: [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3],
       selectedMatch: {
@@ -213,9 +210,12 @@ describe("pdf_find_controller", function () {
     await testSearch({
       eventBus,
       pdfFindController,
-      state: {
+      parameters: {
         query: "Government",
+        caseSensitive: false,
         entireWord: true,
+        phraseSearch: true,
+        findPrevious: false,
       },
       matchesPerPage: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
       selectedMatch: {
@@ -233,9 +233,12 @@ describe("pdf_find_controller", function () {
     await testSearch({
       eventBus,
       pdfFindController,
-      state: {
+      parameters: {
         query: "alternate solution",
+        caseSensitive: false,
+        entireWord: false,
         phraseSearch: false,
+        findPrevious: false,
       },
       matchesPerPage: [0, 0, 0, 0, 0, 1, 0, 0, 4, 0, 0, 0, 0, 0],
       selectedMatch: {
@@ -253,15 +256,19 @@ describe("pdf_find_controller", function () {
     await testSearch({
       eventBus,
       pdfFindController,
-      state: {
+      parameters: {
         query: "fraction",
+        caseSensitive: false,
+        entireWord: false,
+        phraseSearch: true,
+        findPrevious: false,
       },
       matchesPerPage: [3],
       selectedMatch: {
         pageIndex: 0,
         matchIndex: 0,
       },
-      pageMatches: [[19, 46, 62]],
+      pageMatches: [[19, 48, 66]],
       pageMatchesLength: [[8, 8, 8]],
     });
   });

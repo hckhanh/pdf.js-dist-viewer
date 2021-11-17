@@ -93,7 +93,7 @@ class PDFImage {
     this.image = image;
     const dict = image.dict;
 
-    const filter = dict.get("F", "Filter");
+    const filter = dict.get("Filter");
     if (isName(filter)) {
       switch (filter.name) {
         case "JPXDecode":
@@ -114,8 +114,8 @@ class PDFImage {
     }
     // TODO cache rendered images?
 
-    let width = dict.get("W", "Width");
-    let height = dict.get("H", "Height");
+    let width = dict.get("Width", "W");
+    let height = dict.get("Height", "H");
 
     if (
       Number.isInteger(image.width) &&
@@ -139,13 +139,13 @@ class PDFImage {
     this.width = width;
     this.height = height;
 
-    this.interpolate = dict.get("I", "Interpolate");
-    this.imageMask = dict.get("IM", "ImageMask") || false;
+    this.interpolate = dict.get("Interpolate", "I");
+    this.imageMask = dict.get("ImageMask", "IM") || false;
     this.matte = dict.get("Matte") || false;
 
     let bitsPerComponent = image.bitsPerComponent;
     if (!bitsPerComponent) {
-      bitsPerComponent = dict.get("BPC", "BitsPerComponent");
+      bitsPerComponent = dict.get("BitsPerComponent", "BPC");
       if (!bitsPerComponent) {
         if (this.imageMask) {
           bitsPerComponent = 1;
@@ -159,7 +159,7 @@ class PDFImage {
     this.bpc = bitsPerComponent;
 
     if (!this.imageMask) {
-      let colorSpace = dict.getRaw("CS") || dict.getRaw("ColorSpace");
+      let colorSpace = dict.getRaw("ColorSpace") || dict.getRaw("CS");
       if (!colorSpace) {
         info("JPX images (which do not require color spaces)");
         switch (image.numComps) {
@@ -174,7 +174,8 @@ class PDFImage {
             break;
           default:
             throw new Error(
-              `JPX images with ${image.numComps} color components not supported.`
+              `JPX images with ${image.numComps} ` +
+                "color components not supported."
             );
         }
       }
@@ -188,7 +189,7 @@ class PDFImage {
       this.numComps = this.colorSpace.numComps;
     }
 
-    this.decode = dict.getArray("D", "Decode");
+    this.decode = dict.getArray("Decode", "D");
     this.needsDecode = false;
     if (
       this.decode &&
@@ -225,7 +226,7 @@ class PDFImage {
     } else if (mask) {
       if (isStream(mask)) {
         const maskDict = mask.dict,
-          imageMask = maskDict.get("IM", "ImageMask");
+          imageMask = maskDict.get("ImageMask", "IM");
         if (!imageMask) {
           warn("Ignoring /Mask in image without /ImageMask.");
         } else {

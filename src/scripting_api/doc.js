@@ -66,7 +66,6 @@ class Doc extends PDFObject {
     this._numPages = data.numPages || 1;
     this._pageNum = data.pageNum || 0;
     this._producer = data.Producer || "";
-    this._securityHandler = data.EncryptFilterName || null;
     this._subject = data.Subject || "";
     this._title = data.Title || "";
     this._URL = data.URL || "";
@@ -523,7 +522,7 @@ class Doc extends PDFObject {
   }
 
   get securityHandler() {
-    return this._securityHandler;
+    return null;
   }
 
   set securityHandler(_) {

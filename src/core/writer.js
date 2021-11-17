@@ -154,8 +154,8 @@ function writeXFADataForAcroform(str, newRefs) {
 
 function updateXFA({
   xfaData,
-  xfaDatasetsRef,
-  hasXfaDatasetsEntry,
+  datasetsRef,
+  hasDatasets,
   acroFormRef,
   acroForm,
   newRefs,
@@ -166,7 +166,7 @@ function updateXFA({
     return;
   }
 
-  if (!hasXfaDatasetsEntry) {
+  if (!hasDatasets) {
     if (!acroFormRef) {
       warn("XFA - Cannot save it");
       return;
@@ -178,7 +178,7 @@ function updateXFA({
     const oldXfa = acroForm.get("XFA");
     const newXfa = oldXfa.slice();
     newXfa.splice(2, 0, "datasets");
-    newXfa.splice(3, 0, xfaDatasetsRef);
+    newXfa.splice(3, 0, datasetsRef);
 
     acroForm.set("XFA", newXfa);
 
@@ -201,25 +201,25 @@ function updateXFA({
   }
 
   if (xfaData === null) {
-    const datasets = xref.fetchIfRef(xfaDatasetsRef);
+    const datasets = xref.fetchIfRef(datasetsRef);
     xfaData = writeXFADataForAcroform(datasets.getString(), newRefs);
   }
 
   const encrypt = xref.encrypt;
   if (encrypt) {
     const transform = encrypt.createCipherTransform(
-      xfaDatasetsRef.num,
-      xfaDatasetsRef.gen
+      datasetsRef.num,
+      datasetsRef.gen
     );
     xfaData = transform.encryptString(xfaData);
   }
   const data =
-    `${xfaDatasetsRef.num} ${xfaDatasetsRef.gen} obj\n` +
+    `${datasetsRef.num} ${datasetsRef.gen} obj\n` +
     `<< /Type /EmbeddedFile /Length ${xfaData.length}>>\nstream\n` +
     xfaData +
     "\nendstream\nendobj\n";
 
-  newRefs.push({ ref: xfaDatasetsRef, data });
+  newRefs.push({ ref: datasetsRef, data });
 }
 
 function incrementalUpdate({
@@ -227,25 +227,22 @@ function incrementalUpdate({
   xrefInfo,
   newRefs,
   xref = null,
-  hasXfa = false,
-  xfaDatasetsRef = null,
-  hasXfaDatasetsEntry = false,
+  datasetsRef = null,
+  hasDatasets = false,
   acroFormRef = null,
   acroForm = null,
   xfaData = null,
 }) {
-  if (hasXfa) {
-    updateXFA({
-      xfaData,
-      xfaDatasetsRef,
-      hasXfaDatasetsEntry,
-      acroFormRef,
-      acroForm,
-      newRefs,
-      xref,
-      xrefInfo,
-    });
-  }
+  updateXFA({
+    xfaData,
+    datasetsRef,
+    hasDatasets,
+    acroFormRef,
+    acroForm,
+    newRefs,
+    xref,
+    xrefInfo,
+  });
 
   const newXref = new Dict(null);
   const refForXrefTable = xrefInfo.newRef;

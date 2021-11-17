@@ -13,7 +13,6 @@
  * limitations under the License.
  */
 
-import { warn } from "../shared/util.js";
 import { XfaText } from "./xfa_text.js";
 
 class XfaLayer {
@@ -85,10 +84,8 @@ class XfaLayer {
     }
   }
 
-  static setAttributes({ html, element, storage = null, intent, linkService }) {
+  static setAttributes(html, element, storage, intent) {
     const { attributes } = element;
-    const isHTMLAnchorElement = html instanceof HTMLAnchorElement;
-
     if (attributes.type === "radio") {
       // Avoid to have a radio group when printing with the same as one
       // already displayed.
@@ -106,34 +103,13 @@ class XfaLayer {
         if (key === "textContent") {
           html.textContent = value;
         } else if (key === "class") {
-          if (value.length) {
-            html.setAttribute(key, value.join(" "));
-          }
+          html.setAttribute(key, value.join(" "));
         } else {
-          if (isHTMLAnchorElement && (key === "href" || key === "newWindow")) {
-            continue; // Handled below.
-          }
           html.setAttribute(key, value);
         }
       } else {
         Object.assign(html.style, value);
       }
-    }
-
-    if (isHTMLAnchorElement) {
-      if (
-        (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) &&
-        !linkService.addLinkAttributes
-      ) {
-        warn(
-          "XfaLayer.setAttribute - missing `addLinkAttributes`-method on the `linkService`-instance."
-        );
-      }
-      linkService.addLinkAttributes?.(
-        html,
-        attributes.href,
-        attributes.newWindow
-      );
     }
 
     // Set the value after the others to be sure overwrite
@@ -145,32 +121,21 @@ class XfaLayer {
 
   static render(parameters) {
     const storage = parameters.annotationStorage;
-    const linkService = parameters.linkService;
     const root = parameters.xfa;
     const intent = parameters.intent || "display";
     const rootHtml = document.createElement(root.name);
     if (root.attributes) {
-      this.setAttributes({
-        html: rootHtml,
-        element: root,
-        intent,
-        linkService,
-      });
+      this.setAttributes(rootHtml, root);
     }
     const stack = [[root, -1, rootHtml]];
 
     const rootDiv = parameters.div;
     rootDiv.appendChild(rootHtml);
-
-    if (parameters.viewport) {
-      const transform = `matrix(${parameters.viewport.transform.join(",")})`;
-      rootDiv.style.transform = transform;
-    }
+    const transform = `matrix(${parameters.viewport.transform.join(",")})`;
+    rootDiv.style.transform = transform;
 
     // Set defaults.
-    if (intent !== "richText") {
-      rootDiv.setAttribute("class", "xfaLayer xfaFont");
-    }
+    rootDiv.setAttribute("class", "xfaLayer xfaFont");
 
     // Text nodes used for the text highlighter.
     const textDivs = [];
@@ -204,13 +169,7 @@ class XfaLayer {
 
       html.appendChild(childHtml);
       if (child.attributes) {
-        this.setAttributes({
-          html: childHtml,
-          element: child,
-          storage,
-          intent,
-          linkService,
-        });
+        this.setAttributes(childHtml, child, storage, intent);
       }
 
       if (child.children && child.children.length > 0) {
