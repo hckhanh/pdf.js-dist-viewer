@@ -9878,7 +9878,7 @@ fsevents@^1.2.7:
     stylelint: ^13.13.1
     stylelint-config-prettier: ^8.0.2
     stylelint-prettier: ^1.2.0
-    systemjs: ^6.11.0
+    systemjs: ^0.21.6
     systemjs-plugin-babel: ^0.0.25
     terser: ^5.10.0
     through2: ^4.0.2
@@ -12212,10 +12212,10 @@ fsevents@^1.2.7:
   languageName: node
   linkType: hard
 
-"systemjs@npm:^6.11.0":
-  version: 6.11.0
-  resolution: "systemjs@npm:6.11.0"
-  checksum: 11cdc79ec135ab641313dfec0e74bb118afd42d09651e21f5e637461e625ee4e99705f57fc71e10757679b9304fb6e66c9a6266f179925d7721202cdd1e7d720
+"systemjs@npm:^0.21.6":
+  version: 0.21.6
+  resolution: "systemjs@npm:0.21.6"
+  checksum: b334c7ac1ce1b82773e6cc07e8a96f57d4b5881aa31a224360fac3f7f2a401699d8dc1792add8cc590ca7039c2e64266e1199c8e6b8ccdabed9c86380b35f4b6
   languageName: node
   linkType: hard
 
